@@ -68,8 +68,8 @@ int FS::format()
     disk.write(ROOT_BLOCK, temp_arr);
 
     memset(fat, FAT_FREE, sizeof(fat));
-    fat[ROOT_BLOCK] = EOF;
-    fat[FAT_BLOCK]  = EOF;
+    fat[ROOT_BLOCK] = FAT_EOF;
+    fat[FAT_BLOCK]  = FAT_EOF;
 
     write_fat_to_disk();
     
@@ -106,7 +106,7 @@ int FS::create(const std::string& filepath)
     // find that many blocks
     std::vector<uint16_t> blocks;
     
-    for (int i = FAT_BLOCK + 1; i < sizeof(fat); i++)
+    for (int i = FAT_BLOCK + 1; i < FAT_ENTRIES; i++)
     {
         if (fat[i] == FAT_FREE)
         {
@@ -115,12 +115,18 @@ int FS::create(const std::string& filepath)
                 break;
         }
     }
+
+    if (blocks.size() != block_size)
+    {
+        std::cout << "[FS::create] Error: Not enough space" << std::endl;
+        return -1;
+    }
     
     // write metadata to current dir
     {
         dir_entry new_entry = {
             .file_name = "",
-            .size = static_cast<uint32_t>(block_size),
+            .size = static_cast<uint32_t>(size),
             .first_blk = blocks[0],
             .type = TYPE_FILE,
             .access_rights = READ | WRITE
@@ -150,14 +156,14 @@ int FS::create(const std::string& filepath)
 
         if (space_available == false)
         {
-            std::cout << "[FS::create] Error: no space available in current directory";
+            std::cout << "[FS::create] Error: no space available in current directory" << std::endl;
             return -1;
         }
     }
     
     // add the blocks to the FAT
     for (int i = 0; i < blocks.size(); i++)
-        fat[blocks[i]] = i == blocks.size() - 1 ? EOF : blocks[i + 1];
+        fat[blocks[i]] = i == blocks.size() - 1 ? FAT_EOF : blocks[i + 1];
     
     // write FAT to disk
     write_fat_to_disk();
@@ -166,25 +172,32 @@ int FS::create(const std::string& filepath)
     int byte_offset = 0;
     int block_offset = 0;
     uint8_t block[BLOCK_SIZE] = {};
+
+    auto flush_block = [&]() {
+        if (byte_offset == BLOCK_SIZE) {
+            disk.write(blocks[block_offset], block);
+            byte_offset = 0;
+            block_offset++;
+            memset(block, 0, BLOCK_SIZE);
+        }
+    };
     
     for (auto& input : user_input)
     {
         // loop through each character
         for (const char& c : input)
         {
-            block[byte_offset] = c;
-            byte_offset++;
-
-            if (byte_offset == BLOCK_SIZE)
-            {
-                disk.write(blocks[block_offset], block);
-                byte_offset = 0;
-                block_offset++;
-            }
+            block[byte_offset++] = c;
+            flush_block();
         }
+
+        block[byte_offset++] = '\n';
+        flush_block();
     }
 
-    disk.write(blocks[block_offset], block);
+    // only write if we have a partial block
+    if (byte_offset > 0)
+        disk.write(blocks[block_offset], block);
     
     return 0;
 }

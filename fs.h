@@ -9,6 +9,7 @@
 #define FAT_BLOCK 1
 #define FAT_FREE 0
 #define FAT_EOF -1
+#define FAT_ENTRIES BLOCK_SIZE/2
 
 #define TYPE_FILE 0
 #define TYPE_DIR 1
@@ -28,7 +29,7 @@ class FS {
 private:
     Disk disk;
     // size of a FAT entry is 2 bytes
-    int16_t fat[BLOCK_SIZE/2];
+    int16_t fat[FAT_ENTRIES];
 
     dir_entry current_dir;
     
