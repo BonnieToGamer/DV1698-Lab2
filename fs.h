@@ -48,6 +48,13 @@ private:
      */
     int write_fat_to_disk();
 
+    /**
+     * Modifies the given input string so that it is left padded by padding amount
+     * @param string The string to pad
+     * @param padding The amount of padding
+     */
+    void pad_left(std::string& string, int padding);
+
 public:
     FS();
     ~FS();
