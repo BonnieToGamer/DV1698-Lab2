@@ -1,0 +1,31 @@
+# Object files
+
+*.o
+
+# Test files
+
+test1
+test2
+test3
+test4
+test5
+
+# Script object files
+
+test_script*.o
+
+# Binary disk image
+
+diskfile.bin
+
+# Build artifacts
+
+filesystem
+main.o
+shell.o
+fs.o
+disk.o
+
+# IDE folders
+
+.idea/
