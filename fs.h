@@ -1,5 +1,8 @@
+#pragma once
+
 #include <iostream>
 #include <cstdint>
+#include <vector>
 #include "disk.h"
 
 #ifndef __FS_H__
@@ -9,6 +12,7 @@
 #define FAT_BLOCK 1
 #define FAT_FREE 0
 #define FAT_EOF -1
+#define FAT_ENTRIES BLOCK_SIZE/2
 
 #define TYPE_FILE 0
 #define TYPE_DIR 1
@@ -28,7 +32,7 @@ class FS {
 private:
     Disk disk;
     // size of a FAT entry is 2 bytes
-    int16_t fat[BLOCK_SIZE/2];
+    int16_t fat[FAT_ENTRIES];
 
     dir_entry current_dir;
     
@@ -46,6 +50,43 @@ private:
      * @return Success status, 0 - success. 1 - failure
      */
     int write_fat_to_disk();
+
+    /**
+     * Writes the given blocks to the FAT and commits it to disk
+     * @param blocks Blocks to write to FAT
+     * @return Success status, 0 - success. 1 - failure
+     */
+    int add_blocks_to_fat(const std::vector<int16_t>& blocks);
+
+    /**
+     * Gets all related blocks from a given starting block in order from FAT
+     * @param blocks The blocks vector to add to
+     * @param starting_block The starting block to look for more blocks in the FAT
+     */
+    void get_blocks_from_fat(std::vector<int16_t>& blocks, uint16_t starting_block) const;
+
+    /**
+     * Finds `amount` of empty blocks from FAT
+     * @param blocks The blocks vector add to
+     * @param amount The amount of blocks to find
+     */
+    void find_empty_blocks(std::vector<int16_t>& blocks, int amount) const;
+
+    /**
+     * Creates a new file descriptor in an empty space of the given block
+     * @param new_entry New entry to write
+     * @param block_index The block to write to
+     * @param callee The function that called this function
+     * @return Status. 0 - success. -1 - error
+     */
+    int write_new_file_descriptor(const dir_entry& new_entry, int16_t block_index, const std::string& callee);
+    
+    /**
+     * Modifies the given input string so that it is left padded by padding amount
+     * @param string The string to pad
+     * @param padding The amount of padding
+     */
+    void pad_left(std::string& string, int padding);
 
 public:
     FS();
