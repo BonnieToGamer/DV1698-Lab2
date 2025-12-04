@@ -96,7 +96,7 @@ int FS::create(const std::string& filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
 
-    // get user input until empty newline (std::cin?)
+    // get user input until empty newline
     std::vector<std::string> user_input;
     while (true)
     {
@@ -157,6 +157,14 @@ int FS::create(const std::string& filepath)
         for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
         {
             const auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
+
+            // check if file already exists
+            if (std::string(entry->file_name) == filepath)
+            {
+                std::cout << "[FS::create] Error: file with that name already exists\n";
+                return -1;
+            }
+            
             if (entry->file_name[0] == '\0') // empty part of block
             {
                 // write new entry to block
