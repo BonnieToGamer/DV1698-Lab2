@@ -32,8 +32,17 @@ int FS::create_navigation_folders(const uint16_t current_block, const uint16_t p
 
 int FS::write_fat_to_disk()
 {
-    disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat));
-    return 0;
+    return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat));
+}
+
+int FS::add_blocks_to_fat(const std::vector<uint16_t>& blocks)
+{
+    // add the blocks to the FAT
+    for (int i = 0; i < blocks.size(); i++)
+        fat[blocks[i]] = i == blocks.size() - 1 ? FAT_EOF : static_cast<int16_t>(blocks[i + 1]);
+    
+    // write FAT to disk
+    return write_fat_to_disk();
 }
 
 void FS::pad_left(std::string& string, const int padding)
@@ -183,12 +192,11 @@ int FS::create(const std::string& filepath)
         }
     }
     
-    // add the blocks to the FAT
-    for (int i = 0; i < blocks.size(); i++)
-        fat[blocks[i]] = i == blocks.size() - 1 ? FAT_EOF : blocks[i + 1];
-    
-    // write FAT to disk
-    write_fat_to_disk();
+    if (add_blocks_to_fat(blocks) != 0)
+    {
+        std::cout << "[FS::create] Error: could not write FAT to disk\n";
+        return -1;
+    }
     
     // write data to the blocks
     int byte_offset = 0;
@@ -332,6 +340,130 @@ int FS::ls()
 int FS::cp(std::string sourcepath, std::string destpath)
 {
     std::cout << "FS::cp(" << sourcepath << "," << destpath << ")\n";
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(current_dir.first_blk, block) != 0)
+    {
+        std::cout << "[FS::cp] Error: cannot read block nr " << current_dir.first_blk << "\n";
+        return -1;
+    }
+
+    dir_entry source_entry{};
+    bool no_duplicate_name = true;
+    
+    for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
+    {
+        auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
+
+        // empty file descriptor
+        if (entry->file_name[0] == '\0')
+            continue;
+
+        if (std::string(entry->file_name) == destpath)
+        {
+            no_duplicate_name = false;
+            break;
+        }
+
+        if (std::string(entry->file_name) == sourcepath)
+            memcpy(&source_entry, entry, sizeof(dir_entry));
+    }
+
+    if (no_duplicate_name == false)
+    {
+        std::cout << "[FS::cp] Error: there already exists a file with that name\n";
+        return -1;
+    }
+
+    if (source_entry.file_name[0] == '\0')
+    {
+        std::cout << "[FS::cp] Error: source file does not exist\n";
+        return -1;
+    }
+
+    dir_entry destination = source_entry;
+    memset(&destination.file_name, 0, sizeof(destination.file_name));
+
+    const size_t n = std::min(destpath.size(), sizeof(destination.file_name) - 1);
+    memcpy(&destination.file_name, destpath.c_str(), n);
+
+    // get the source files block indices
+    std::vector<int16_t> blocks;
+    uint16_t current_block_index = source_entry.first_blk;
+
+    while (true)
+    {
+        blocks.emplace_back(current_block_index);
+
+        if (fat[current_block_index] == FAT_EOF)
+            break;
+        
+        current_block_index = fat[current_block_index];
+    }
+
+    // find that amount of new blocks
+    std::vector<uint16_t> new_blocks;
+    for (int i = FAT_BLOCK + 1; i < FAT_ENTRIES; i++)
+    {
+        if (fat[i] != FAT_FREE)
+            continue;
+
+        new_blocks.emplace_back(i);
+
+        // check if we have enough blocks
+        if (new_blocks.size() == blocks.size())
+            break;
+    }
+
+    if (new_blocks.size() != blocks.size())
+    {
+        std::cout << "[FS::cp] Error: not enough free space to copy file\n";
+        return -1;
+    }
+
+    // assign new blocks in FAT
+    destination.first_blk = new_blocks[0];
+
+    if (add_blocks_to_fat(new_blocks) != 0)
+    {
+        std::cout << "[FS::cp] Error: could not write FAT to disk\n";
+        return -1;
+    }
+
+    for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
+    {
+        auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
+
+        if (entry->file_name[0] == '\0')
+        {
+            memcpy(entry, &destination, sizeof(dir_entry));
+            break;
+        }
+    }
+
+    if (disk.write(current_dir.first_blk, block) != 0)
+    {
+        std::cout << "[FS::cp] Error: could not write directory block to disk\n";
+        return -1;
+    }
+
+    // we know blocks and new_blocks are the same size
+    // so the following operations are completely safe
+    for (int i = 0; i < blocks.size(); i++)
+    {
+        if (disk.read(blocks[i], block) != 0)
+        {
+            std::cout << "[FS::cp] Error: could not read block nr " << blocks[i] << "\n";
+            return -1;
+        }
+
+        if (disk.write(new_blocks[i], block) != 0)
+        {
+            std::cout << "[FS::cp] Error: could not write block nr " << blocks[i] << "\n";
+            return -1;
+        }
+    }
+    
     return 0;
 }
 

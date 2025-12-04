@@ -1,5 +1,8 @@
+#pragma once
+
 #include <iostream>
 #include <cstdint>
+#include <vector>
 #include "disk.h"
 
 #ifndef __FS_H__
@@ -47,6 +50,13 @@ private:
      * @return Success status, 0 - success. 1 - failure
      */
     int write_fat_to_disk();
+
+    /**
+     * Writes the given blocks to the FAT and commits it to disk
+     * @param blocks Blocks to write to FAT
+     * @return Success status, 0 - success. 1 - failure
+     */
+    int add_blocks_to_fat(const std::vector<uint16_t>& blocks);
 
     /**
      * Modifies the given input string so that it is left padded by padding amount
