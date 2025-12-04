@@ -78,55 +78,64 @@ int FS::format()
 
 // create <filepath> creates a new file on the disk, the data content is
 // written on the following rows (ended with an empty row)
-int FS::create(const std::string& filepath)
+int
+FS::create(std::string filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
-
-    // get user input until empty newline (std::cin?)
     std::vector<std::string> user_input;
-    while (true)
+    while(true)
     {
         std::string line;
         std::getline(std::cin, line);
-        
-        if (line.empty())
+        if(line.empty())
+        {
+            user_input.push_back("\n");
             break;
-        
-        user_input.emplace_back(line);
+        }
+        user_input.push_back(line);
     }
-    
-    // calculate how many blocks are needed
+
+    //calculate each line size to get full block size for 
     int size = 0;
-    for (const auto& input : user_input)
-        size += static_cast<int>(input.size());
-
-    const int block_size = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
-    
-    // find that many blocks
-    std::vector<uint16_t> blocks;
-    
-    for (int i = FAT_BLOCK + 1; i < sizeof(fat); i++)
+    for(const auto& input : user_input)
     {
-        if (fat[i] == FAT_FREE)
+        size += static_cast<int>(input.size());
+    }
+    const int block_size_new = (size + BLOCK_SIZE - 1) /BLOCK_SIZE;
+    // int size = (static_cast<int>(user_input.size()));
+    // const int block_size_new =  (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    
+    // find the needed blocks for 
+    std::vector<uint16_t> blocks;
+    for(int i = FAT_BLOCK + 1; i < FAT_ENTRIES; i++)
+    {
+        if(fat[i] == FAT_FREE)
         {
             blocks.emplace_back(i);
-            if (blocks.size() == block_size)
+            if(blocks.size() == block_size_new)
+            {
                 break;
+            }
         }
     }
+
+    if (blocks.size() != block_size_new)
+    {
+        std::cout << "[FS::create] Error: Not enough space" << std::endl;
+        return -1;
+    }
     
-    // write metadata to current dir
+
     {
         dir_entry new_entry = {
             .file_name = "",
-            .size = static_cast<uint32_t>(block_size),
+            .size = static_cast<uint32_t>(size),
             .first_blk = blocks[0],
             .type = TYPE_FILE,
             .access_rights = READ | WRITE
         };
 
-        strncpy(new_entry.file_name, filepath.c_str(), sizeof(new_entry.file_name) - 1);
+         strncpy(new_entry.file_name, filepath.c_str(), sizeof(new_entry.file_name) - 1);
 
         uint8_t block[BLOCK_SIZE] = {};
         disk.read(current_dir.first_blk, block);
@@ -147,44 +156,64 @@ int FS::create(const std::string& filepath)
                 break;
             }
         }
-
-        if (space_available == false)
+        if(space_available == false)
         {
-            std::cout << "[FS::create] Error: no space available in current directory";
+            std::cout << "[FS::create] Error: no space available in current directory" << std::endl;
             return -1;
         }
     }
-    
-    // add the blocks to the FAT
-    for (int i = 0; i < blocks.size(); i++)
-        fat[blocks[i]] = i == blocks.size() - 1 ? EOF : blocks[i + 1];
-    
-    // write FAT to disk
-    write_fat_to_disk();
-    
-    // write data to the blocks
+
+    // add blocks to the FAT
+    for(int i = 0; i < blocks.size(); i++)
+    {
+        if(i == (blocks.size() -1))
+        {
+            fat[blocks[i]] = FAT_EOF;
+        }
+        else 
+        {
+            fat[blocks[i]] = blocks[i +1];
+        }
+    }
+
+    disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat));
+
     int byte_offset = 0;
     int block_offset = 0;
     uint8_t block[BLOCK_SIZE] = {};
-    
-    for (auto& input : user_input)
-    {
-        // loop through each character
-        for (const char& c : input)
-        {
-            block[byte_offset] = c;
-            byte_offset++;
 
-            if (byte_offset == BLOCK_SIZE)
+    //Loop through each byte and store it in block vector
+    //Write to disk when block is full
+    for(auto& input: user_input)
+    {
+        for(const char& byte: input)
+        {
+            block[byte_offset++] = byte;
+            if(byte_offset == BLOCK_SIZE)
             {
                 disk.write(blocks[block_offset], block);
                 byte_offset = 0;
                 block_offset++;
+                memset(block, 0, BLOCK_SIZE);
+
             }
+        }
+
+        block[byte_offset++] = '\n';
+        if(byte_offset == BLOCK_SIZE)
+        {
+            disk.write(blocks[block_offset], block);
+            byte_offset = 0;
+            block_offset++;
+            memset(block, 0, BLOCK_SIZE);
+
         }
     }
 
-    disk.write(blocks[block_offset], block);
+    if(byte_offset > 0)
+    {
+        disk.write(blocks[block_offset], block);
+    }
     
     return 0;
 }
