@@ -132,7 +132,7 @@ int FS::create(const std::string& filepath)
 
     if (blocks.size() != block_size)
     {
-        std::cout << "[FS::create] Error: Not enough space" << std::endl;
+        std::cout << "[FS::create] Error: not enough space" << std::endl;
         return -1;
     }
     
@@ -195,7 +195,7 @@ int FS::create(const std::string& filepath)
     int block_offset = 0;
     uint8_t block[BLOCK_SIZE] = {};
 
-    auto flush_block = [&]() {
+    auto try_flush_block = [&]() {
         if (byte_offset == BLOCK_SIZE) {
             disk.write(blocks[block_offset], block);
             byte_offset = 0;
@@ -210,11 +210,11 @@ int FS::create(const std::string& filepath)
         for (const char& c : input)
         {
             block[byte_offset++] = c;
-            flush_block();
+            try_flush_block();
         }
 
         block[byte_offset++] = '\n';
-        flush_block();
+        try_flush_block();
     }
 
     // only write if we have a partial block
@@ -243,9 +243,9 @@ int FS::cat(std::string filepath)
     {
         auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
 
-        // end of files
+        // empty file descriptor
         if (entry->file_name[0] == '\0')
-            break;
+            continue;
 
         if (std::string(entry->file_name) == filepath)
         {
