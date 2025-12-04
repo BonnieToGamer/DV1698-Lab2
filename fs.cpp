@@ -309,74 +309,19 @@ int FS::ls()
         return -1;
     }
 
-    std::vector<std::string> entries;
-
-    int block_padding = 0;
-    int size_padding = 0;
-
-    // find padding for each number
-    for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
-    {
-        const auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
-
-        // end of files
-        if (entry->file_name[0] == '\0')
-            break;
-
-        const int block_size = static_cast<int>(std::to_string(entry->first_blk).size());
-        const int size_size = static_cast<int>(std::to_string(entry->size).size());
-        
-        if (block_size > block_padding)
-            block_padding = block_size;
-
-        if (size_size > size_padding)
-            size_padding = size_size;
-    }
+    std::cout << "name\tsize\n";
 
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
         const auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
 
-        // end of files
+        // empty file descriptor
         if (entry->file_name[0] == '\0')
-            break;
+            continue;
 
-        std::string permissions;
-
-        auto add_permission = [&](const uint8_t permission, const std::string& character) {
-            if ((entry->access_rights & permission) == permission)
-                permissions.append(character);
-            else
-                permissions.append("-");
-        };
-
-        add_permission(READ, "r");
-        add_permission(WRITE, "w");
-        add_permission(EXECUTE, "x");
-
-        std::string block_str = std::to_string(entry->first_blk);
-        pad_left(block_str, block_padding);
-
-        std::string size_str = std::to_string(entry->size);
-        pad_left(size_str, size_padding);
-
-        std::string result;
-        result.append(permissions);
-        result.append(" ");
-        result.append(block_str);
-        result.append(" ");
-        result.append(size_str);
-        result.append(" ");
-        result.append(entry->file_name);
-        
-        entries.push_back(result);
+        std::cout << entry->file_name << "\t\t" << entry->size << "\n";
     }
-
-    std::cout << "total " << entries.size() << "\n";
     
-    for (const auto& entry : entries)
-        std::cout << entry << "\n";
-
     std::cout << std::flush;
     
     return 0;
