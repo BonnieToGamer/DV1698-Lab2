@@ -228,6 +228,73 @@ int FS::create(const std::string& filepath)
 int FS::cat(std::string filepath)
 {
     std::cout << "FS::cat(" << filepath << ")\n";
+
+    uint8_t block[BLOCK_SIZE];
+
+    if (disk.read(current_dir.first_blk, block) != 0) {
+        std::cout << "[FS::ls] Error: cannot read current dir block" << std::endl;
+        return -1;
+    }
+
+    dir_entry file_entry{};
+    
+    // find padding for each number
+    for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
+    {
+        auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
+
+        // end of files
+        if (entry->file_name[0] == '\0')
+            break;
+
+        if (std::string(entry->file_name) == filepath)
+        {
+            memcpy(&file_entry, entry, sizeof(dir_entry));
+            break;
+        }
+    }
+
+    if (file_entry.file_name[0] == '\0')
+    {
+        std::cout << "[FS::cat] Error: no file with that name";
+        return -1;
+    }
+
+    std::vector<int16_t> blocks;
+    uint16_t current_block_index = file_entry.first_blk;
+
+    while (true)
+    {
+        blocks.emplace_back(current_block_index);
+
+        if (fat[current_block_index] == FAT_EOF)
+            break;
+        
+        current_block_index = fat[current_block_index];
+    }
+
+    int bytes_read = 0;
+
+    for (const auto block_index : blocks)
+    {
+        if (disk.read(block_index, block) != 0)
+        {
+            std::cout << "[FS::cat] Error reading block nr " << block_index << "\n";
+            return -1;
+        }
+        
+        for (const auto byte : block)
+        {
+            if (bytes_read == file_entry.size)
+                break;
+
+            std::cout << byte;
+            bytes_read++;
+        }
+    }
+
+    std::cout << std::endl;
+    
     return 0;
 }
 
