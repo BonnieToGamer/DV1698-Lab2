@@ -385,7 +385,7 @@ int FS::cp(std::string sourcepath, std::string destpath)
     memset(&destination.file_name, 0, sizeof(destination.file_name));
 
     const size_t n = std::min(destpath.size(), sizeof(destination.file_name) - 1);
-    memcpy(&destination.file_name, destpath.c_str(), n);
+    strncpy(destination.file_name, destpath.c_str(), sizeof(destination.file_name) - 1);
 
     // get the source files block indices
     std::vector<int16_t> blocks;
