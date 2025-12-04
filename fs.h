@@ -56,8 +56,31 @@ private:
      * @param blocks Blocks to write to FAT
      * @return Success status, 0 - success. 1 - failure
      */
-    int add_blocks_to_fat(const std::vector<uint16_t>& blocks);
+    int add_blocks_to_fat(const std::vector<int16_t>& blocks);
 
+    /**
+     * Gets all related blocks from a given starting block in order from FAT
+     * @param blocks The blocks vector to add to
+     * @param starting_block The starting block to look for more blocks in the FAT
+     */
+    void get_blocks_from_fat(std::vector<int16_t>& blocks, uint16_t starting_block) const;
+
+    /**
+     * Finds `amount` of empty blocks from FAT
+     * @param blocks The blocks vector add to
+     * @param amount The amount of blocks to find
+     */
+    void find_empty_blocks(std::vector<int16_t>& blocks, int amount) const;
+
+    /**
+     * Creates a new file descriptor in an empty space of the given block
+     * @param new_entry New entry to write
+     * @param block_index The block to write to
+     * @param callee The function that called this function
+     * @return Status. 0 - success. -1 - error
+     */
+    int write_new_file_descriptor(const dir_entry& new_entry, int16_t block_index, const std::string& callee);
+    
     /**
      * Modifies the given input string so that it is left padded by padding amount
      * @param string The string to pad

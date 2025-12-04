@@ -35,14 +35,87 @@ int FS::write_fat_to_disk()
     return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat));
 }
 
-int FS::add_blocks_to_fat(const std::vector<uint16_t>& blocks)
+int FS::add_blocks_to_fat(const std::vector<int16_t>& blocks)
 {
     // add the blocks to the FAT
     for (int i = 0; i < blocks.size(); i++)
-        fat[blocks[i]] = i == blocks.size() - 1 ? FAT_EOF : static_cast<int16_t>(blocks[i + 1]);
+        fat[blocks[i]] = i == blocks.size() - 1 ? FAT_EOF : blocks[i + 1];
     
     // write FAT to disk
     return write_fat_to_disk();
+}
+
+void FS::get_blocks_from_fat(std::vector<int16_t>& blocks, const uint16_t starting_block) const
+{
+    uint16_t current_block_index = starting_block;
+    
+    while (true)
+    {
+        blocks.emplace_back(current_block_index);
+
+        if (fat[current_block_index] == FAT_EOF)
+            break;
+        
+        current_block_index = fat[current_block_index];
+    }
+}
+
+void FS::find_empty_blocks(std::vector<int16_t>& blocks, const int amount) const
+{
+    for (int i = 0; i < FAT_ENTRIES; i++)
+    {
+        if (fat[i] != FAT_FREE)
+            continue;
+
+        blocks.emplace_back(i);
+
+        // check if we have enough blocks
+        if (blocks.size() == amount)
+            break;
+    }
+}
+
+int FS::write_new_file_descriptor(const dir_entry& new_entry, const int16_t block_index, const std::string& callee)
+{
+    uint8_t block[BLOCK_SIZE] = {};
+    if (disk.read(block_index, block) != 0)
+    {
+        std::cout << "[" << callee << "] Error: could not read directory block\n";
+        return -1;
+    }
+
+    bool space_available = false;
+
+    // find empty part in the block to write to
+    for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
+    {
+        const auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
+
+        // check if file already exists
+        if (std::string(entry->file_name) == new_entry.file_name)
+        {
+            std::cout << "[" << callee << "] Error: file with that name already exists\n";
+            return -1;
+        }
+        
+        if (entry->file_name[0] == '\0') // empty part of block
+        {
+            // write new entry to block
+            memcpy(block + i, &new_entry, sizeof(dir_entry));
+            disk.write(current_dir.first_blk, block);
+                
+            space_available = true;
+            break;
+        }
+    }
+
+    if (space_available == false)
+    {
+        std::cout << "[" << callee << "] Error: no space available in current directory" << std::endl;
+        return -1;
+    }
+    
+    return 0;
 }
 
 void FS::pad_left(std::string& string, const int padding)
@@ -127,70 +200,27 @@ int FS::create(const std::string& filepath)
 
     
     // find that many blocks
-    std::vector<uint16_t> blocks;
+    std::vector<int16_t> blocks;
+    find_empty_blocks(blocks, block_size);
     
-    for (int i = FAT_BLOCK + 1; i < FAT_ENTRIES; i++)
-    {
-        if (fat[i] == FAT_FREE)
-        {
-            blocks.emplace_back(i);
-            if (blocks.size() == block_size)
-                break;
-        }
-    }
-
     if (blocks.size() != block_size)
     {
-        std::cout << "[FS::create] Error: not enough space" << std::endl;
+        std::cout << "[FS::create] Error: not enough free space to create file" << std::endl;
         return -1;
     }
     
     // write metadata to current dir
-    {
-        dir_entry new_entry = {
-            .file_name = "",
-            .size = static_cast<uint32_t>(size),
-            .first_blk = blocks[0],
-            .type = TYPE_FILE,
-            .access_rights = READ | WRITE
-        };
+    dir_entry new_entry = {
+        .file_name = "",
+        .size = static_cast<uint32_t>(size),
+        .first_blk = static_cast<uint16_t>(blocks[0]),
+        .type = TYPE_FILE,
+        .access_rights = READ | WRITE
+    };
 
-        strncpy(new_entry.file_name, filepath.c_str(), sizeof(new_entry.file_name) - 1);
-
-        uint8_t block[BLOCK_SIZE] = {};
-        disk.read(current_dir.first_blk, block);
-
-        bool space_available = false;
-
-        // find empty part in the block to write to
-        for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
-        {
-            const auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
-
-            // check if file already exists
-            if (std::string(entry->file_name) == filepath)
-            {
-                std::cout << "[FS::create] Error: file with that name already exists\n";
-                return -1;
-            }
-            
-            if (entry->file_name[0] == '\0') // empty part of block
-            {
-                // write new entry to block
-                memcpy(block + i, &new_entry, sizeof(dir_entry));
-                disk.write(current_dir.first_blk, block);
-                
-                space_available = true;
-                break;
-            }
-        }
-
-        if (space_available == false)
-        {
-            std::cout << "[FS::create] Error: no space available in current directory" << std::endl;
-            return -1;
-        }
-    }
+    strncpy(new_entry.file_name, filepath.c_str(), sizeof(new_entry.file_name) - 1);
+    if (write_new_file_descriptor(new_entry, static_cast<int16_t>(current_dir.first_blk), "FS::create") != 0)
+        return -1;
     
     if (add_blocks_to_fat(blocks) != 0)
     {
@@ -246,7 +276,6 @@ int FS::cat(std::string filepath)
 
     dir_entry file_entry{};
     
-    // find padding for each number
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
         auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
@@ -269,17 +298,7 @@ int FS::cat(std::string filepath)
     }
 
     std::vector<int16_t> blocks;
-    uint16_t current_block_index = file_entry.first_blk;
-
-    while (true)
-    {
-        blocks.emplace_back(current_block_index);
-
-        if (fat[current_block_index] == FAT_EOF)
-            break;
-        
-        current_block_index = fat[current_block_index];
-    }
+    get_blocks_from_fat(blocks, file_entry.first_blk);
 
     int bytes_read = 0;
 
@@ -384,36 +403,15 @@ int FS::cp(std::string sourcepath, std::string destpath)
     dir_entry destination = source_entry;
     memset(&destination.file_name, 0, sizeof(destination.file_name));
 
-    const size_t n = std::min(destpath.size(), sizeof(destination.file_name) - 1);
     strncpy(destination.file_name, destpath.c_str(), sizeof(destination.file_name) - 1);
 
     // get the source files block indices
     std::vector<int16_t> blocks;
-    uint16_t current_block_index = source_entry.first_blk;
-
-    while (true)
-    {
-        blocks.emplace_back(current_block_index);
-
-        if (fat[current_block_index] == FAT_EOF)
-            break;
-        
-        current_block_index = fat[current_block_index];
-    }
+    get_blocks_from_fat(blocks, source_entry.first_blk);
 
     // find that amount of new blocks
-    std::vector<uint16_t> new_blocks;
-    for (int i = FAT_BLOCK + 1; i < FAT_ENTRIES; i++)
-    {
-        if (fat[i] != FAT_FREE)
-            continue;
-
-        new_blocks.emplace_back(i);
-
-        // check if we have enough blocks
-        if (new_blocks.size() == blocks.size())
-            break;
-    }
+    std::vector<int16_t> new_blocks;
+    find_empty_blocks(new_blocks, static_cast<int>(blocks.size()));
 
     if (new_blocks.size() != blocks.size())
     {
@@ -430,22 +428,8 @@ int FS::cp(std::string sourcepath, std::string destpath)
         return -1;
     }
 
-    for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
-    {
-        auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
-
-        if (entry->file_name[0] == '\0')
-        {
-            memcpy(entry, &destination, sizeof(dir_entry));
-            break;
-        }
-    }
-
-    if (disk.write(current_dir.first_blk, block) != 0)
-    {
-        std::cout << "[FS::cp] Error: could not write directory block to disk\n";
+    if (write_new_file_descriptor(destination, static_cast<int16_t>(current_dir.first_blk), "FS::cp") != 0)
         return -1;
-    }
 
     // we know blocks and new_blocks are the same size
     // so the following operations are completely safe
