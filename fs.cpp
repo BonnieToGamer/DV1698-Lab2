@@ -222,6 +222,71 @@ FS::create(std::string filepath)
 int FS::cat(std::string filepath)
 {
     std::cout << "FS::cat(" << filepath << ")\n";
+
+    uint8_t block[BLOCK_SIZE] = {};
+    disk.read(ROOT_BLOCK, block);
+    dir_entry* dirEntries = reinterpret_cast<dir_entry*>(block);
+
+    const int max_entries = BLOCK_SIZE / sizeof(dir_entry);
+
+    dir_entry* file_entry = nullptr;
+    for(int i = 0; i < max_entries; i++)
+    {
+        if(dirEntries[i].file_name[0] == '\0') 
+            continue;
+        if(std::string(dirEntries[i].file_name) == filepath)
+        {
+            file_entry = &dirEntries[i];
+            break;
+        }
+
+    }
+
+    if(file_entry == nullptr)
+    {
+        std::cout << filepath << ": does not exist" << '\n';
+        return -1;
+    }
+
+    if(file_entry->type != TYPE_FILE)
+    {
+        std::cout << filepath << ": not a file" << '\n';
+        return -1;
+    }
+
+
+    uint8_t fatbuf[BLOCK_SIZE];
+    disk.read(FAT_BLOCK, fatbuf);
+    std::memcpy(fat, fatbuf, sizeof(fat));
+
+    int16_t current_block = file_entry->first_blk;
+    uint32_t bytes_left = file_entry->size;
+    uint8_t filebuffer[BLOCK_SIZE];
+    
+    while(bytes_left > 0)
+    {
+        disk.read(current_block, filebuffer);
+        uint32_t bytes_to_print;
+        if(bytes_left < BLOCK_SIZE)
+        {
+            bytes_to_print = bytes_left;
+        }
+        else 
+        {
+            bytes_to_print = BLOCK_SIZE;
+        }
+
+        std::cout.write(reinterpret_cast<char*>(filebuffer), bytes_to_print);
+
+        bytes_left -= bytes_to_print;
+        current_block = fat[current_block];
+        if(current_block == FAT_EOF) 
+        {
+            std::cout << std::endl;
+            break;
+        }
+
+    }
     return 0;
 }
 

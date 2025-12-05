@@ -9,6 +9,7 @@
 #define FAT_BLOCK 1
 #define FAT_FREE 0
 #define FAT_EOF -1
+#define FAT_ENTRIES BLOCK_SIZE / 2
 
 #define TYPE_FILE 0
 #define TYPE_DIR 1
@@ -54,7 +55,7 @@ public:
     int format();
     // create <filepath> creates a new file on the disk, the data content is
     // written on the following rows (ended with an empty row)
-    int create(const std::string& filepath);
+    int create(std::string filepath);
     // cat <filepath> reads the content of a file and prints it on the screen
     int cat(std::string filepath);
     // ls lists the content in the current directory (files and sub-directories)
