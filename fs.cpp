@@ -325,8 +325,174 @@ int FS::rm(std::string filepath)
 int FS::append(std::string filepath1, std::string filepath2)
 {
     std::cout << "FS::append(" << filepath1 << "," << filepath2 << ")\n";
+
+    if (filepath1.empty() || filepath2.empty()) return -1;
+    
+    uint8_t dir_block[BLOCK_SIZE] = {};
+    disk.read(ROOT_BLOCK, dir_block);
+
+    auto *dirEntries = reinterpret_cast<dir_entry*>(dir_block);
+    const int max_entries = BLOCK_SIZE / sizeof(dir_entry);
+
+    dir_entry *file_entry1 = nullptr;
+    dir_entry *file_entry2 = nullptr;
+
+    for (int i = 0; i < max_entries; ++i)
+    {
+        if (dirEntries[i].file_name[0] == '\0')
+            continue;
+
+        if (std::string(dirEntries[i].file_name) == filepath1)
+        {
+            file_entry1 = &dirEntries[i];
+        }
+            
+        else if (std::string(dirEntries[i].file_name) == filepath2)
+        {
+            file_entry2 = &dirEntries[i];
+        }
+
+        if (file_entry1 && file_entry2) break;
+    }
+
+    if (!file_entry1 || !file_entry2) return -1;
+
+    if (file_entry1->type != TYPE_FILE || file_entry2->type != TYPE_FILE) return -1;
+
+    
+    uint8_t fatbuf[BLOCK_SIZE];
+    if (disk.read(FAT_BLOCK, fatbuf) == -1) return -1;
+
+    std::memcpy(fat, fatbuf, sizeof(fat));
+
+    uint16_t last_blk2 = file_entry2->first_blk;
+    uint32_t size2 = file_entry2->size;
+
+    while (fat[last_blk2] != FAT_EOF)
+    {
+        last_blk2 = fat[last_blk2];
+    }
+    
+    uint32_t lastblk_offset = size2 % BLOCK_SIZE;
+
+    uint8_t buf2[BLOCK_SIZE];
+
+    //If last block is full find a free block.
+    if (lastblk_offset == 0)
+    {
+        int new_blk = -1;
+        for (int i = FAT_BLOCK + 1; i < FAT_ENTRIES; ++i)
+        {
+            if (fat[i] == FAT_FREE)
+            {
+                new_blk = i;
+                break;
+            }
+        }
+        if (new_blk < 0)
+        {
+            std::cout << "[FS::append] Error: no free blocks\n";
+            return -1;
+        }
+
+        fat[last_blk2] = static_cast<uint16_t>(new_blk);
+        fat[new_blk] = FAT_EOF;
+        last_blk2 = static_cast<uint16_t>(new_blk);
+
+        std::memset(buf2, 0, BLOCK_SIZE);
+        lastblk_offset = 0;
+    }
+    else
+    {
+        // Last block is partially filled, preserve the data
+        if (disk.read(last_blk2, buf2) == -1)
+            return -1;
+    }
+
+    // Get the filepath1 data
+    uint16_t blk1 = file_entry1->first_blk;      
+    uint32_t bytes_left1 = file_entry1->size;  
+
+    uint8_t buf1[BLOCK_SIZE];
+
+    // write the data blocks to the end of filepath2 until no data left.
+    while (bytes_left1 > 0)
+    {
+        if (disk.read(blk1, buf1) == -1)
+            return -1;
+
+        uint32_t bytes_from_this_block = std::min<uint32_t>(bytes_left1, BLOCK_SIZE);
+        uint32_t src_offset = 0;
+
+        while (bytes_from_this_block > 0)
+        {
+            // if current block is full, write it to disk, find a free block and chain it in FAT
+            // and continue writing into the new free block.
+            if (lastblk_offset == BLOCK_SIZE)
+            {
+                
+                if (disk.write(last_blk2, buf2) == -1)
+                    return -1;
+
+                int new_blk = -1;
+                for (int i = FAT_BLOCK + 1; i < FAT_ENTRIES; ++i)
+                {
+                    if (fat[i] == FAT_FREE)
+                    {
+                        new_blk = i;
+                        break;
+                    }
+                }
+                if (new_blk < 0)
+                {
+                    std::cout << "[FS::append] Error: no free blocks\n";
+                    return -1;
+                }
+
+                fat[last_blk2] = static_cast<uint16_t>(new_blk);
+                fat[new_blk] = FAT_EOF;
+                last_blk2 = static_cast<uint16_t>(new_blk);
+
+                std::memset(buf2, 0, BLOCK_SIZE);
+                lastblk_offset = 0;
+            }
+
+
+            uint32_t space = BLOCK_SIZE - lastblk_offset;
+            uint32_t chunk = std::min(space, bytes_from_this_block);
+
+            std::memcpy(buf2 + lastblk_offset,
+                        buf1 + src_offset,
+                        chunk);
+
+            lastblk_offset += chunk;
+            src_offset += chunk;
+            bytes_from_this_block -= chunk;
+            bytes_left1 -= chunk;
+        }
+
+       
+        if (fat[blk1] == FAT_EOF)
+            break;
+        blk1 = fat[blk1];
+    }
+
+    
+    if (disk.write(last_blk2, buf2) == -1)
+        return -1;
+
+    file_entry2->size += file_entry1->size;
+
+    // Write the updated directory to root
+    if (disk.write(ROOT_BLOCK, dir_block) == -1)
+        return -1;
+
+    // write updated FAT
+    write_fat_to_disk();
+
     return 0;
 }
+
 
 // mkdir <dirpath> creates a new sub-directory with the name <dirpath>
 // in the current directory
