@@ -68,8 +68,8 @@ int FS::format()
     disk.write(ROOT_BLOCK, temp_arr);
 
     memset(fat, FAT_FREE, sizeof(fat));
-    fat[ROOT_BLOCK] = EOF;
-    fat[FAT_BLOCK]  = EOF;
+    fat[ROOT_BLOCK] = FAT_EOF;
+    fat[FAT_BLOCK]  = FAT_EOF;
 
     write_fat_to_disk();
     
@@ -520,7 +520,48 @@ int FS::pwd()
 // chmod <accessrights> <filepath> changes the access rights for the
 // file <filepath> to <accessrights>.
 int FS::chmod(std::string accessrights, std::string filepath)
-{
+{   
     std::cout << "FS::chmod(" << accessrights << "," << filepath << ")\n";
+
+    if(filepath.empty()) return -1;
+
+    // Read the disk
+    uint8_t block[BLOCK_SIZE] = {};
+    disk.read(ROOT_BLOCK, block);
+
+    //get all the directories
+    dir_entry* dirEntries = reinterpret_cast<dir_entry*>(block);
+    const int max_entries = BLOCK_SIZE / sizeof(dir_entry);
+
+    // Find the correct file
+    dir_entry* file_entry = nullptr;
+    for(int i = 0; i < max_entries; i++)
+    {
+        if(std::string(dirEntries[i].file_name) == filepath)
+        {
+            file_entry = &dirEntries[i];
+        }
+    }
+
+    if(file_entry == nullptr)
+    {
+        std::cout << "not found" << std::endl; 
+        return -1;
+    } 
+
+    // get the correct bit from the string "accessrights";
+    uint8_t rights = 0;
+    for(char c: accessrights)
+    {
+        if (c == 'r') rights |= READ;
+        if (c == 'w') rights |= WRITE;
+        if (c == 'x') rights |= EXECUTE;
+    }
+    // change the access_rights
+    file_entry->access_rights = rights;
+
+    // write back to the disk.
+    disk.write(ROOT_BLOCK, block);
+
     return 0;
 }
