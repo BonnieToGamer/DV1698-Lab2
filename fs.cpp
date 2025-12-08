@@ -977,7 +977,7 @@ int FS::cd(std::string dirpath)
 
     if (!found)
     {
-        std::cout << "[FS::cd] Error dir: " << dirpath << " not found" << std::endl;
+        std::cout << "[FS::cd] Error: dir " << dirpath << " not found" << std::endl;
         return -1;
     }
 
