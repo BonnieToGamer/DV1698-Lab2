@@ -247,8 +247,6 @@ int FS::navigate_to_dir(const std::string& path, dir_entry& result_dir)
 
 FS::FS()
 {
-    std::cout << "FS::FS()... Creating file system\n";
-
     int result = disk.read(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat));
     if (result == -1) return;
 
@@ -269,8 +267,6 @@ FS::~FS()
 // ------------------------------------------------------------------
 int FS::format()
 {
-    std::cout << "FS::format()\n";
-
     uint8_t temp_arr[BLOCK_SIZE] = {};
     disk.write(ROOT_BLOCK, temp_arr);
 
@@ -291,7 +287,11 @@ int FS::format()
 // ------------------------------------------------------------------
 int FS::create(const std::string& filepath)
 {
-    std::cout << "FS::create(" << filepath << ")\n";
+    if (filepath.size() >= 56)
+    {
+        std::cout << "[FS::create] Error: file name too long\n";
+        return -1;
+    }
 
     std::vector<std::string> user_input;
     while (true)
@@ -375,8 +375,6 @@ int FS::create(const std::string& filepath)
 // ------------------------------------------------------------------
 int FS::cat(std::string filepath)
 {
-    std::cout << "FS::cat(" << filepath << ")\n";
-
     uint8_t block[BLOCK_SIZE];
 
     if (disk.read(current_dir.first_blk, block) != 0)
