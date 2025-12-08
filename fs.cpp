@@ -6,7 +6,11 @@
 #include <algorithm>
 #include "fs.h"
 
-// Helper: convert access_rights bitmask to "rwx" style string
+/**
+ * Convert access_rights bitmask to "rwx" style string
+ * @param rights The rights to convert
+ * @return The string of rights formatted
+ */
 static std::string rights_to_string(uint8_t rights)
 {
     std::string s = "---";
@@ -16,7 +20,46 @@ static std::string rights_to_string(uint8_t rights)
     return s;
 }
 
-int FS::create_navigation_folders(const uint16_t current_block, const uint16_t previous_block, uint8_t block[])
+/**
+ * Splits a path into individual strings
+ * @param path The path to split
+ * @return The split path
+ */
+static std::vector<std::string> split_path(const std::string& path)
+{
+    std::vector<std::string> components;
+    std::string current;
+
+    for (char c : path)
+    {
+        if (c == '/')
+        {
+            if (!current.empty())
+            {
+                components.push_back(current);
+                current.clear();
+            }
+        }
+        else
+        {
+            current += c;
+        }
+    }
+
+    if (!current.empty())
+        components.push_back(current);
+
+    return components;
+}
+
+/**
+ * Creates the folders '.' and '..' for a given directory.
+ * @param current_block The block of the current directory
+ * @param previous_block The block of the parent directory
+ * @param block The block array to write to
+ * @return Success status, 0 - success. 1 - failure
+ */
+static int create_navigation_folders(const uint16_t current_block, const uint16_t previous_block, uint8_t block[])
 {
     // "." entry – directory itself
     dir_entry current_entry{};
@@ -131,42 +174,6 @@ int FS::write_new_file_descriptor(const dir_entry& new_entry, const int16_t bloc
     }
 
     return 0;
-}
-
-void FS::pad_left(std::string& string, const int padding)
-{
-    if (padding <= static_cast<int>(string.length()))
-        return;
-
-    const int to_add = padding - static_cast<int>(string.length());
-    string = std::string(to_add, ' ') + string;
-}
-
-std::vector<std::string> FS::split_path(const std::string& path)
-{
-    std::vector<std::string> components;
-    std::string current;
-
-    for (char c : path)
-    {
-        if (c == '/')
-        {
-            if (!current.empty())
-            {
-                components.push_back(current);
-                current.clear();
-            }
-        }
-        else
-        {
-            current += c;
-        }
-    }
-
-    if (!current.empty())
-        components.push_back(current);
-
-    return components;
 }
 
 int FS::find_entry_in_dir(uint16_t dir_block, const std::string& name, dir_entry& result)

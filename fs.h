@@ -37,15 +37,6 @@ private:
     dir_entry current_dir;
     
     /**
-     * Creates the folders '.' and '..' for a given directory.
-     * @param current_block The block of the current directory
-     * @param previous_block The block of the parent directory
-     * @param block The block array to write to
-     * @return Success status, 0 - success. 1 - failure
-     */
-    int create_navigation_folders(uint16_t current_block, uint16_t previous_block, uint8_t block[]);
-
-    /**
      * Writes the current fat to disk.
      * @return Success status, 0 - success. 1 - failure
      */
@@ -80,14 +71,6 @@ private:
      * @return Status. 0 - success. -1 - error
      */
     int write_new_file_descriptor(const dir_entry& new_entry, int16_t block_index, const std::string& callee);
-    
-    /**
-     * Modifies the given input string so that it is left padded by padding amount
-     * @param string The string to pad
-     * @param padding The amount of padding
-     */
-    void pad_left(std::string& string, int padding);
-
     /**
      * Finds an entry inside a directory
      * @param dir_block The directory to navigate
@@ -104,13 +87,6 @@ private:
      * @return Status. 0 - success. -1 -error
      */
     int navigate_to_dir(const std::string& path, dir_entry& result_dir);
-    
-    /**
-     * Splits a path into individual strings
-     * @param path The path to split
-     * @return The split path
-     */
-    std::vector<std::string> split_path(const std::string& path);
 
 public:
     FS();
