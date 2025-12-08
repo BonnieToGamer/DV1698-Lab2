@@ -452,7 +452,10 @@ int FS::ls()
         return -1;
     }
 
-    std::cout << "name\t" << "type\t" << "accessrights\t" << "size\n";
+    std::cout << "name\t type\t accessrights\t size\n";
+
+    std::vector<std::string> dir_strs;
+    std::vector<std::string> file_strs;
 
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
@@ -468,13 +471,27 @@ int FS::ls()
         std::string type_str = (entry->type == TYPE_DIR) ? "dir" : "file";
         std::string rights_str = rights_to_string(entry->access_rights);
 
-        std::cout << name << "\t" << type_str << "\t" << rights_str << "\t";
+        std::string result = name + "\t ";
+        result += type_str + "\t ";
+        result += rights_str + "\t ";
+
         if (entry->type == TYPE_DIR)
-            std::cout << "-";
+        {
+            result += "-";
+            dir_strs.emplace_back(result);
+        }
+
         else
-            std::cout << entry->size;
-        std::cout << "\n";
+        {
+            result += std::to_string(entry->size);
+            file_strs.emplace_back(result);
+        }
     }
+
+    for (const auto& str : dir_strs)
+        std::cout << str << "\n";
+    for (const auto& str : file_strs)
+        std::cout << str << "\n";
 
     std::cout << std::flush;
     return 0;
