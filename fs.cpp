@@ -299,7 +299,7 @@ int FS::cat(std::string filepath)
 
     if (file_entry.file_name[0] == '\0')
     {
-        std::cout << "[FS::cat] Error: no file with that name";
+        std::cout << "[FS::cat] Error: no file with that name\n";
         return -1;
     }
 
