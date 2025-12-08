@@ -343,7 +343,7 @@ int FS::ls()
 
     //för test 5 la vi till type utskrift med
 
-    std::cout << "name\ttype\tsize\n";
+    std::cout << "name\tsize\ttype\n";
 
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
