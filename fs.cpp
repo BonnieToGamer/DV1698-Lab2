@@ -823,6 +823,80 @@ FS::mkdir(std::string dirpath)
 {
     std::cout << "FS::mkdir(" << dirpath << ")\n";
 
+    if (dirpath.length() >= 56) {
+        std::cout << "[FS::mkdir] Error: Directory name too long" << std::endl;
+        return -1;
+    }
+
+    if (dirpath == ".." || dirpath == ".") {
+        std::cout << "[FS::mkdir] Error: Can not create dir with reserved name: " << dirpath << std::endl;
+        return -1;
+    }
+
+    uint8_t dir_block[BLOCK_SIZE];
+    if (disk.read(current_dir.first_blk, dir_block) != 0) {
+        std::cout << "[FS::mkdir] Error: Can not read current dir" << std::endl;
+        return -1;
+    }
+
+    dir_entry* entries = reinterpret_cast<dir_entry*>(dir_block);
+    int max_entries = BLOCK_SIZE / sizeof(dir_entry);
+
+    int free_space = -1;
+    for (int i = 0; i < max_entries; i++)
+    {
+        if (entries[i].file_name[0] == '\0' && free_space == -1) {
+            free_space = i;
+        } else if (entries[i].file_name[0] != '\0' && strcmp(entries[i].file_name, dirpath.c_str()) == 0) {
+            std::cout << "[FS::mkdir] Error: directory or file: " << dirpath << " already exists" << std::endl;
+            return -1;
+        }
+    }
+    
+    if (free_space == -1) {
+        std::cout << "[FS::mkdir] Error: director is full" << std::endl;
+        return -1;
+    }
+
+    int16_t new_dir_block = -1;
+    for (int i = 0; i < BLOCK_SIZE/2; i++) {
+        if (fat[i] == FAT_FREE && i != ROOT_BLOCK && i != FAT_BLOCK) {
+            new_dir_block = i;
+            break;
+        }
+    }
+ if (new_dir_block == -1) {
+        std::cout << "Error: No free blocks for new directory" << std::endl;
+        return -1;
+    }
+    
+    uint8_t new_dir_data[BLOCK_SIZE] = {0};
+    
+    dir_entry dotdot_entry;
+    strcpy(dotdot_entry.file_name, "..");
+    dotdot_entry.size = 0;
+    dotdot_entry.first_blk = current_dir.first_blk;
+    dotdot_entry.type = TYPE_DIR;
+    dotdot_entry.access_rights = READ | WRITE | EXECUTE;
+    
+    memcpy(new_dir_data, &dotdot_entry, sizeof(dir_entry));
+    
+    disk.write(new_dir_block, new_dir_data);
+    
+    fat[new_dir_block] = FAT_EOF;
+    disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat));
+
+    dir_entry new_dir_entry;
+    strcpy(new_dir_entry.file_name, dirpath.c_str());
+    new_dir_entry.size = 0;
+    new_dir_entry.first_blk = new_dir_block;
+    new_dir_entry.type = TYPE_DIR;
+    new_dir_entry.access_rights = READ | WRITE | EXECUTE;
+    
+    memcpy(&entries[free_space], &new_dir_entry, sizeof(dir_entry));
+
+    disk.write(current_dir.first_blk, dir_block);
+    
     return 0;
 }
 
