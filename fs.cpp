@@ -11,7 +11,7 @@ int FS::create_navigation_folders(const uint16_t current_block, const uint16_t p
         .size = 0,
         .first_blk = current_block,
         .type = TYPE_DIR,
-        .access_rights = READ | WRITE
+        .access_rights = READ | WRITE | EXECUTE
     };
 
 
@@ -21,7 +21,7 @@ int FS::create_navigation_folders(const uint16_t current_block, const uint16_t p
         .size = 0,
         .first_blk = previous_block,
         .type = TYPE_DIR,
-        .access_rights = READ | WRITE
+        .access_rights = READ | WRITE | EXECUTE
     };
 
     memcpy(block, &current_entry, sizeof(dir_entry));
@@ -336,7 +336,9 @@ int FS::ls()
         return -1;
     }
 
-    std::cout << "name\tsize\n";
+    //för test 5 la vi till type utskrift med
+
+    std::cout << "name\ttype\tsize\n";
 
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
@@ -346,7 +348,7 @@ int FS::ls()
         if (entry->file_name[0] == '\0')
             continue;
 
-        std::cout << entry->file_name << "\t\t" << entry->size << "\n";
+        std::cout << entry->file_name << "\t\t" << entry->size << (entry->type == TYPE_DIR ? "dir" : "file") << "\n";
     }
     
     std::cout << std::flush;
@@ -873,19 +875,12 @@ FS::mkdir(std::string dirpath)
     
     uint8_t new_dir_data[BLOCK_SIZE] = {0};
     
-    dir_entry double_dot_entry;
-    strcpy(double_dot_entry.file_name, "..");
-    double_dot_entry.size = 0;
-    double_dot_entry.first_blk = current_dir.first_blk;
-    double_dot_entry.type = TYPE_DIR;
-    double_dot_entry.access_rights = READ | WRITE | EXECUTE;
-    
-    memcpy(new_dir_data, &double_dot_entry, sizeof(dir_entry));
+    create_navigation_folders(new_dir_block, current_dir.first_blk, new_dir_data);
     
     disk.write(new_dir_block, new_dir_data);
     
     fat[new_dir_block] = FAT_EOF;
-    disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat));
+    write_fat_to_disk();
 
     dir_entry new_dir_entry;
     strcpy(new_dir_entry.file_name, dirpath.c_str());
@@ -1060,7 +1055,7 @@ FS::pwd()
 // chmod <accessrights> <filepath> changes the access rights for the
 // file <filepath> to <accessrights>.
 int FS::chmod(std::string accessrights, std::string filepath)
-{
+{   
     std::cout << "FS::chmod(" << accessrights << "," << filepath << ")\n";
 
     if(filepath.empty()) return -1;
@@ -1070,11 +1065,11 @@ int FS::chmod(std::string accessrights, std::string filepath)
     disk.read(ROOT_BLOCK, block);
 
     //get all the directories
-    dir_entry* dirEntries = reinterpret_cast<dir_entry>(block);
+    dir_entry* dirEntries = reinterpret_cast<dir_entry*>(block);
     const int max_entries = BLOCK_SIZE / sizeof(dir_entry);
 
     // Find the correct file
-    dir_entry file_entry = nullptr;
+    dir_entry* file_entry = nullptr;
     for(int i = 0; i < max_entries; i++)
     {
         if(std::string(dirEntries[i].file_name) == filepath)
@@ -1089,14 +1084,31 @@ int FS::chmod(std::string accessrights, std::string filepath)
         return -1;
     } 
 
-    // get the correct bit from the string "accessrights";
+    
     uint8_t rights = 0;
-    for(char c: accessrights)
+
+    
+    // if it is a accessrights is a number char
+    // Check if the bit value creates a 1 or a 0,
+    // and enable the access rights that is a nonzero value. 
+    if (isdigit(stoi(accessrights)))
     {
-        if (c == 'r') rights |= READ;
-        if (c == 'w') rights |= WRITE;
-        if (c == 'x') rights |= EXECUTE;
+        int num = accessrights[0] - '0';  // converts char to int
+        if (num & 4) rights |= READ;
+        if (num & 2) rights |= WRITE;
+        if (num & 1) rights |= EXECUTE;
     }
+    else
+    {
+        // get the correct bit from the string "accessrights";
+        for(char c: accessrights)
+        {
+            if (c == 'r') rights |= READ;
+            if (c == 'w') rights |= WRITE;
+            if (c == 'x') rights |= EXECUTE;
+        }
+    }
+
     // change the access_rights
     file_entry->access_rights = rights;
 
