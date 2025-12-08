@@ -265,7 +265,6 @@ int FS::format()
     std::cout << "FS::format()\n";
 
     uint8_t temp_arr[BLOCK_SIZE] = {};
-    create_navigation_folders(ROOT_BLOCK, ROOT_BLOCK, temp_arr);
     disk.write(ROOT_BLOCK, temp_arr);
 
     std::memset(fat, FAT_FREE, sizeof(fat));
