@@ -520,6 +520,12 @@ int FS::mv(std::string sourcepath, std::string destpath)
 {
     std::cout << "FS::mv(" << sourcepath << "," << destpath << ")\n";
 
+    if (destpath.length() >= 56)
+    {
+        std::cout << "Error: Destination filename too long" << std::endl;
+        return -1;
+    }
+
     uint8_t block[BLOCK_SIZE];
     if (disk.read(current_dir.first_blk, block) != 0)
     {
@@ -533,6 +539,9 @@ int FS::mv(std::string sourcepath, std::string destpath)
     int source_id = -1;
     bool does_destination_exist = false;
     dir_entry source_entry{};
+
+    bool is_dir = false;
+    int dir_index = -1;
 
     for (int i = 0; i < max_entries; i++)
     {
@@ -559,7 +568,14 @@ int FS::mv(std::string sourcepath, std::string destpath)
 
         if (strcmp(entries[i].file_name, destpath.c_str()) == 0)
         {
-            does_destination_exist = true;
+            if (entries[i].type == TYPE_FILE)
+            {
+                does_destination_exist = true;
+                break;
+            }
+
+            is_dir = true;
+            dir_index = i;
         }
     }
 
@@ -575,29 +591,26 @@ int FS::mv(std::string sourcepath, std::string destpath)
         return -1;
     }
 
-    if (destpath.length() >= 56)
+    const dir_entry entry = entries[source_id];
+    
+    if (is_dir == false)
     {
-        std::cout << "Error: Destination filename too long" << std::endl;
-        return -1;
+        memset(entries[source_id].file_name, 0, sizeof(entries[source_id].file_name));
+        strncpy(entries[source_id].file_name, destpath.c_str(), sizeof(entries[source_id].file_name) - 1);
+        if (write_new_file_descriptor(entry, static_cast<int16_t>(current_dir.first_blk), "FS::mv") != 0)
+            return -1;
     }
 
-    uint32_t old_size = entries[source_id].size;
-    uint16_t old_first_blk = entries[source_id].first_blk;
-    uint8_t old_access_rigths = entries[source_id].access_rights;
-
-    memset(entries[source_id].file_name, 0, sizeof(entries[source_id].file_name));
-
-    strncpy(entries[source_id].file_name, destpath.c_str(), sizeof(entries[source_id].file_name) - 1);
-
-    entries[source_id].size = old_size;
-    entries[source_id].first_blk = old_first_blk;
-    entries[source_id].access_rights = old_access_rigths;
-    entries[source_id].type = TYPE_FILE;
-
-    if (disk.write(current_dir.first_blk, block) != 0)
+    else
     {
-        std::cout << "[FS::mv] Error: Could not write dir to disk" << std::endl;
-        return -1;
+        const dir_entry* entry_dir = reinterpret_cast<dir_entry*>(block + dir_index * sizeof(dir_entry));
+        if (write_new_file_descriptor(entry, static_cast<int16_t>(entry_dir->first_blk), "FS::mv") != 0)
+            return -1;
+
+        // remove old file descriptor
+        memset(block + source_id * sizeof(dir_entry), 0, sizeof(dir_entry));
+        if (disk.write(current_dir.first_blk, block) != 0)
+            return -1;
     }
 
     return 0;
@@ -654,7 +667,7 @@ int FS::rm(std::string filepath)
 
     write_fat_to_disk();
 
-    memset(&block + entry_index * sizeof(dir_entry), 0, sizeof(dir_entry));
+    memset(block + entry_index * sizeof(dir_entry), 0, sizeof(dir_entry));
 
     disk.write(current_dir.first_blk, block);
     
