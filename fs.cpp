@@ -160,8 +160,6 @@ int FS::format()
 
     uint8_t temp_arr[BLOCK_SIZE] = {}; // zero-initialize it
 
-    create_navigation_folders(ROOT_BLOCK, ROOT_BLOCK, temp_arr);
-
     disk.write(ROOT_BLOCK, temp_arr);
 
     memset(fat, FAT_FREE, sizeof(fat));
