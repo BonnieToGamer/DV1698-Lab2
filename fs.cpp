@@ -843,7 +843,7 @@ int FS::mkdir(std::string dirpath)
         }
         else if (entries[i].file_name[0] != '\0' && strcmp(entries[i].file_name, dirpath.c_str()) == 0)
         {
-            std::cout << "[FS::mkdir] Error: directory or file: " << dirpath << " already exists" << std::endl;
+            std::cout << "[FS::mkdir] Error: directory or file " << dirpath << " already exists" << std::endl;
             return -1;
         }
     }
