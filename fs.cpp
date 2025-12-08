@@ -146,7 +146,13 @@ FS::FS()
 
     if (result == -1) return;
 
-    memcpy(&current_dir, block, sizeof(dir_entry));
+    current_dir = {
+        .file_name = "/",
+        .size = 0,
+        .first_blk = ROOT_BLOCK,
+        .type = TYPE_DIR,
+        .access_rights = READ | WRITE | EXECUTE
+    };
 }
 
 FS::~FS()
