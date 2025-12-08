@@ -355,7 +355,10 @@ int FS::ls()
 
     //för test 5 la vi till type utskrift med
 
-    std::cout << "name\tsize\ttype\n";
+    std::cout << "name\t type\t size\n";
+
+    std::vector<std::string> dir_prints;
+    std::vector<std::string> file_prints;
 
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
@@ -364,9 +367,23 @@ int FS::ls()
         // empty file descriptor
         if (entry->file_name[0] == '\0' || std::string(entry->file_name) == ".." || std::string(entry->file_name) == ".")
             continue;
+        
+        std::string str =
+            std::string(entry->file_name) + "\t " +
+            (entry->type == TYPE_DIR ? "dir" : "file") + "\t " +
+            (entry->type == TYPE_DIR ? "-" : std::to_string(entry->size)) + "\n";
 
-        std::cout << entry->file_name << "\t " << entry->size << "\t " << (entry->type == TYPE_DIR ? "dir" : "file") << "\n";
+        if (entry->type == TYPE_FILE)
+            file_prints.emplace_back(str);
+        else
+            dir_prints.emplace_back(str);
     }
+
+    for (const auto& str : dir_prints)
+        std::cout << str;
+
+    for (const auto& str : file_prints)
+        std::cout << str;
 
     std::cout << std::flush;
 
