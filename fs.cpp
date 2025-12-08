@@ -355,7 +355,7 @@ int FS::ls()
         if (entry->file_name[0] == '\0' || std::string(entry->file_name) == ".." || std::string(entry->file_name) == ".")
             continue;
 
-        std::cout << entry->file_name << "\t\t" << entry->size << "\t\t" << (entry->type == TYPE_DIR ? "dir" : "file") << "\n";
+        std::cout << entry->file_name << "\t " << entry->size << "\t " << (entry->type == TYPE_DIR ? "dir" : "file") << "\n";
     }
 
     std::cout << std::flush;
