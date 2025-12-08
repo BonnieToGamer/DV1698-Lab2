@@ -195,9 +195,7 @@ int FS::create(const std::string& filepath)
     // calculate how many blocks are needed
     int size = 0;
     for (const auto& input : user_input)
-        size += static_cast<int>(input.size());
-
-    size += 1; // don't forget the null terminator
+        size += static_cast<int>(input.size()) + 1; // +1 for newlines
 
     const int block_size = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     
