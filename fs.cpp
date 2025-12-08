@@ -954,7 +954,7 @@ int FS::cd(std::string dirpath)
 
     for (int i = 0; i < max_entries; i++)
     {
-        if (entries[i].file_name[0] = '\0' && strcmp(entries[i].file_name, dirpath.c_str()) == 0)
+        if (entries[i].file_name[0] != '\0' && strcmp(entries[i].file_name, dirpath.c_str()) == 0)
         {
             //kontroll för katalog
             if (entries[i].type != TYPE_DIR)
