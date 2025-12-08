@@ -313,6 +313,12 @@ int FS::cat(std::string filepath)
         return -1;
     }
 
+    if (file_entry.type == TYPE_DIR)
+    {
+        std::cout << "[FS::cat] Error: cannot read from a directory\n";
+        return -1;
+    }
+
     std::vector<int16_t> blocks;
     get_blocks_from_fat(blocks, file_entry.first_blk);
 
@@ -405,6 +411,8 @@ int FS::cp(std::string sourcepath, std::string destpath)
 
     dir_entry source_entry{};
     bool no_duplicate_name = true;
+    bool is_dir = false;
+    int dir_index = -1;
 
     for (int i = 0; i < BLOCK_SIZE; i += sizeof(dir_entry))
     {
@@ -416,8 +424,14 @@ int FS::cp(std::string sourcepath, std::string destpath)
 
         if (std::string(entry->file_name) == destpath)
         {
-            no_duplicate_name = false;
-            break;
+            if (entry->type != TYPE_DIR)
+            {
+                no_duplicate_name = false;
+                break;
+            }
+
+            is_dir = true;
+            dir_index = i;
         }
 
         if (std::string(entry->file_name) == sourcepath)
@@ -437,10 +451,13 @@ int FS::cp(std::string sourcepath, std::string destpath)
     }
 
     dir_entry destination = source_entry;
-    memset(&destination.file_name, 0, sizeof(destination.file_name));
-
-    strncpy(destination.file_name, destpath.c_str(), sizeof(destination.file_name) - 1);
-
+    
+    if (is_dir == false)
+    {
+        memset(&destination.file_name, 0, sizeof(destination.file_name));
+        strncpy(destination.file_name, destpath.c_str(), sizeof(destination.file_name) - 1);
+    }
+    
     // get the source files block indices
     std::vector<int16_t> blocks;
     get_blocks_from_fat(blocks, source_entry.first_blk);
@@ -464,8 +481,18 @@ int FS::cp(std::string sourcepath, std::string destpath)
         return -1;
     }
 
-    if (write_new_file_descriptor(destination, static_cast<int16_t>(current_dir.first_blk), "FS::cp") != 0)
-        return -1;
+    if (is_dir == false)
+    {
+        if (write_new_file_descriptor(destination, static_cast<int16_t>(current_dir.first_blk), "FS::cp") != 0)
+            return -1;
+    }
+
+    else
+    {
+        auto* entry = reinterpret_cast<dir_entry*>(&block[dir_index]);        
+        if (write_new_file_descriptor(destination, static_cast<int16_t>(entry->first_blk), "FS::cp") != 0)
+            return -1;
+    }
 
     // we know blocks and new_blocks are the same size
     // so the following operations are completely safe
