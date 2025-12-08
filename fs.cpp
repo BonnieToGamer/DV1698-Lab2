@@ -32,7 +32,7 @@ int FS::create_navigation_folders(const uint16_t current_block, const uint16_t p
 
 int FS::write_fat_to_disk()
 {
-    return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat));
+    return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat));
 }
 
 int FS::add_blocks_to_fat(const std::vector<int16_t>& blocks)
