@@ -549,14 +549,31 @@ int FS::chmod(std::string accessrights, std::string filepath)
         return -1;
     } 
 
-    // get the correct bit from the string "accessrights";
+    
     uint8_t rights = 0;
-    for(char c: accessrights)
+
+    
+    // if it is a accessrights is a number char
+    // Check if the bit value creates a 1 or a 0,
+    // and enable the access rights that is a nonzero value. 
+    if (isdigit(stoi(accessrights)))
     {
-        if (c == 'r') rights |= READ;
-        if (c == 'w') rights |= WRITE;
-        if (c == 'x') rights |= EXECUTE;
+        int num = accessrights[0] - '0';  // converts char to int
+        if (num & 4) rights |= READ;
+        if (num & 2) rights |= WRITE;
+        if (num & 1) rights |= EXECUTE;
     }
+    else
+    {
+        // get the correct bit from the string "accessrights";
+        for(char c: accessrights)
+        {
+            if (c == 'r') rights |= READ;
+            if (c == 'w') rights |= WRITE;
+            if (c == 'x') rights |= EXECUTE;
+        }
+    }
+
     // change the access_rights
     file_entry->access_rights = rights;
 
