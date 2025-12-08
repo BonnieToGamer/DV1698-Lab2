@@ -179,6 +179,12 @@ int FS::create(const std::string& filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
 
+    if (filepath.size() >= 56)
+    {
+        std::cout << "[FS::create] Error: file name too long\n";
+        return -1;
+    }
+
     // get user input until empty newline
     std::vector<std::string> user_input;
     while (true)
