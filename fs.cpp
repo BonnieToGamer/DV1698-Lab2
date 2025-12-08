@@ -407,15 +407,15 @@ int FS::cp(std::string sourcepath, std::string destpath)
             memcpy(&source_entry, entry, sizeof(dir_entry));
     }
 
-    if (no_duplicate_name == false)
-    {
-        std::cout << "[FS::cp] Error: there already exists a file with that name\n";
-        return -1;
-    }
-
     if (source_entry.file_name[0] == '\0')
     {
         std::cout << "[FS::cp] Error: source file does not exist\n";
+        return -1;
+    }
+    
+    if (no_duplicate_name == false)
+    {
+        std::cout << "[FS::cp] Error: there already exists a file with that name\n";
         return -1;
     }
 
@@ -488,14 +488,12 @@ int FS::mv(std::string sourcepath, std::string destpath)
 
     int source_id = -1;
     bool does_destination_exist = false;
-    dir_entry source_entry;
+    dir_entry source_entry{};
 
     for (int i = 0; i < max_entries; i++)
     {
         if (entries[i].file_name[0] == '\0')
-        {
             continue;
-        }
 
         if (strcmp(entries[i].file_name, sourcepath.c_str()) == 0)
         {
@@ -521,6 +519,12 @@ int FS::mv(std::string sourcepath, std::string destpath)
         }
     }
 
+    if (source_entry.file_name[0] == '\0')
+    {
+        std::cout << "[FS::mv] Error: Source file does not exist\n";
+        return -1;
+    }
+    
     if (does_destination_exist)
     {
         std::cout << "[FS::mv] Error: Destination file " << destpath << " already exists " << std::endl;
@@ -560,113 +564,56 @@ int FS::rm(std::string filepath)
 {
     std::cout << "FS::rm(" << filepath << ")\n";
 
-    /*
-    ======= LÄS NUVARANDE KATALOG BLOCK =======
-
-    ifall current_dir.first_blk inte är block 0, root dir, så kommer read misslyckas för vi kommer inte lyckas hitta filen
-    */
     uint8_t block[BLOCK_SIZE];
     if (disk.read(current_dir.first_blk, block) != 0)
     {
-        std::cout << "[FS::rm] Error: could not read directory\n";
+        std::cout << "[FS::rm] Error: could not read block " << current_dir.first_blk << "\n";
         return -1;
     }
 
-    //gör om blocket till en array av directory entries
-    dir_entry* entries = reinterpret_cast<dir_entry*>(block);
-    int max_entries = BLOCK_SIZE / sizeof(dir_entry);
+    const dir_entry* entries = reinterpret_cast<dir_entry*>(block);
+    constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
 
-    /*
-    ====== LETA UPP ÖNSKAD FIL =======
-
-    alla dir_entry som är tomma har file_name[0] == 0
-    vilket innebär att dom är lediga / tomma
-    här hoppar vi över tomma filer
-    */
-
-    int entry_id = -1;
-    for (int i = 0; i < max_entries; i++)
+    dir_entry found_entry{};
+    int entry_index = -1;
+    
+    for (int i = 0; i < size; i++)
     {
-        //när filnamnet matchar exakt den önskade filen så tar vi denns id plats och slutar leta
-        if (strcmp(entries[i].file_name, filepath.c_str()) == 0)
+        const dir_entry& entry = entries[i];
+
+        if (entry.file_name[0] == '\0')
+            continue;
+
+        if (std::string(entry.file_name) == filepath && (entry.type & TYPE_FILE) == 0)
         {
-            //enkel dubbelkoll så man faktiskt raderar en fil, osäker hur nödvändig för själva uppgiften
-            if (entries[i].type != TYPE_FILE)
-            {
-                std::cout << "[FS::rm] Error: Cannot remove directories with rm" << std::endl;
-                return -1;
-            }
-
-            if (!(entries[i].access_rights & WRITE))
-            {
-                std::cout << "[FS::rm] Error: No write permission for " << filepath << std::endl;
-                return -1;
-            }
-
-            entry_id = i;
+            entry_index = i;
+            found_entry = entry;
             break;
         }
     }
 
-    //detta är bara en if ifall vi inte hittar önskad fil
-    if (entry_id == -1)
+    if (found_entry.file_name[0] == '\0')
     {
-        std::cout << "couldnt find:" << filepath << "\n";
+        std::cout << "[FS::rm] Error: file does not exist\n";
         return -1;
     }
 
-    /*
-    ====== CHECKA FIL TYP =======
-
-    här vill vi kolla så vi nollar en fil, inte ett directory
-    så TYPE_FILE är ok, medans TYPE_DIR inte är ok
-    det hade förstört filsystemet
-    */
-
-    dir_entry& file = entries[entry_id];
-
-    if (file.type != TYPE_FILE)
+    int current_block = found_entry.first_blk;
+    while (fat[current_block] != FAT_EOF)
     {
-        std::cout << "cant remove directories";
-        return -1;
+        const int prev_block = current_block;
+        current_block = fat[current_block];
+        fat[prev_block] = FAT_FREE;
     }
 
-    /*
-    ====== FRIGÖR BLOCK UTEFTER FAT KEDJAN =======
-    */
+    fat[current_block] = FAT_FREE;
 
-    uint16_t current_block = file.first_blk;
+    write_fat_to_disk();
 
-    //ifall block2 == FAT_EOF så har de ingen fil data, då kan vi hoppa över block rensningen
-    while (current_block != FAT_EOF)
-    {
-        if (current_block >= BLOCK_SIZE / 2)
-        {
-            std::cout << "[FS::rm] Error: Invalid FAT entry " << current_block << std::endl;
-            break;
-        }
-
-        uint16_t next_block = fat[current_block];
-
-        //nollar blockets data, på disken genom att skriva över det
-        uint8_t empty[BLOCK_SIZE] = {0};
-        disk.write(current_block, empty);
-
-        //här markerar vi fat som free, enligt instruktionerna
-        fat[current_block] = FAT_FREE;
-
-        //gå till nästa block i kedjan
-        current_block = next_block;
-    }
-
-    //nollar dir_entryn, file_name[0] = '\0', = 0
-    memset(&entries[entry_id], 0, sizeof(dir_entry));
+    memset(&block + entry_index * sizeof(dir_entry), 0, sizeof(dir_entry));
 
     disk.write(current_dir.first_blk, block);
-
-    //skriver tillbaka fat till disken
-    disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat));
-
+    
     return 0;
 }
 
