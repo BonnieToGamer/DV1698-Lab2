@@ -865,7 +865,7 @@ FS::mkdir(std::string dirpath)
             break;
         }
     }
-    
+
     if (new_dir_block == -1) {
         std::cout << "Error: No free blocks for new directory" << std::endl;
         return -1;
@@ -906,6 +906,83 @@ int
 FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
+
+    //"cd .."!
+    if (dirpath == "..") {
+        //if sats för ifall vi är root gör nada
+        if (current_dir.first_blk == ROOT_BLOCK) {
+            return 0;
+        }
+
+        uint8_t current_dir_block[BLOCK_SIZE];
+        if (disk.read(current_dir.first_blk, current_dir_block) != 0) {
+            std::cout << "[FS::cd] Error: Can not read current dir" << std::endl;
+            return -1;
+        }
+
+        //ba kollar så .. finns
+        dir_entry* entries = reinterpret_cast<dir_entry*>(current_dir_block);
+        if (entries[0].file_name[0] == '\0' || strcmp(entries[0].file_name, "..") != 0) {
+            std::cout << "[FS::cd] Error: Invalid directory struct as .. wasnt found" << std::endl;
+            return -1;
+        }
+    
+        //hämtar parent dir block
+        uint16_t parent_block = entries[0].first_blk;
+
+        //dubbelkolla om parent ärr roooooot!
+        if (parent_block == ROOT_BLOCK) {
+            current_dir.first_blk = ROOT_BLOCK;
+            current_dir.type == TYPE_DIR;
+            strcpy(current_dir.file_name, "unknown");
+            current_dir.size = 0;
+            current_dir.access_rights = READ | WRITE | EXECUTE;
+        }
+
+        return 0;
+    }
+
+    //cd till specifik directory
+    uint8_t current_dir_block[BLOCK_SIZE];
+    if (disk.read(current_dir.first_blk, current_dir_block) != 0) {
+        std::cout << "[FS::cd] Error: Can not read current directory" << std::endl;
+        return -1;
+    }
+
+    dir_entry* entries = reinterpret_cast<dir_entry*>(current_dir_block);
+    int max_entries = BLOCK_SIZE / sizeof(dir_entry);
+
+    bool found = false;
+    dir_entry targeted_directory;
+
+    for (int i = 0; i < max_entries; i++)
+    {
+        if (entries[i].file_name[0] = '\0' && strcmp(entries[i].file_name, dirpath.c_str()) == 0) {
+            
+            //kontroll för katalog
+            if(entries[i].type != TYPE_DIR) {
+                std::cout << "[FS::cd] Error: " << dirpath << " is not a directory" << std::endl;
+                return -1;
+            }
+
+            if (!(entries[i].access_rights & EXECUTE)) {
+                std::cout << "[FS::cd] Error: no exe perm for this dir: " << dirpath << std::endl;
+                return -1;
+            }
+
+            targeted_directory = entries[i];
+            found = true;
+            break;
+        }
+    }
+
+    if(!found) {
+        std::cout << "[FS::cd] Error dir: " << dirpath << " not found" << std::endl;
+        return -1;
+    }
+
+    current_dir = targeted_directory;
+
     return 0;
 }
 
