@@ -102,7 +102,7 @@ int FS::write_new_file_descriptor(const dir_entry& new_entry, const int16_t bloc
         {
             // write new entry to block
             memcpy(block + i, &new_entry, sizeof(dir_entry));
-            disk.write(current_dir.first_blk, block);
+            disk.write(block_index, block);
 
             space_available = true;
             break;
