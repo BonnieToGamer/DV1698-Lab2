@@ -865,21 +865,22 @@ FS::mkdir(std::string dirpath)
             break;
         }
     }
- if (new_dir_block == -1) {
+    
+    if (new_dir_block == -1) {
         std::cout << "Error: No free blocks for new directory" << std::endl;
         return -1;
     }
     
     uint8_t new_dir_data[BLOCK_SIZE] = {0};
     
-    dir_entry dotdot_entry;
-    strcpy(dotdot_entry.file_name, "..");
-    dotdot_entry.size = 0;
-    dotdot_entry.first_blk = current_dir.first_blk;
-    dotdot_entry.type = TYPE_DIR;
-    dotdot_entry.access_rights = READ | WRITE | EXECUTE;
+    dir_entry double_dot_entry;
+    strcpy(double_dot_entry.file_name, "..");
+    double_dot_entry.size = 0;
+    double_dot_entry.first_blk = current_dir.first_blk;
+    double_dot_entry.type = TYPE_DIR;
+    double_dot_entry.access_rights = READ | WRITE | EXECUTE;
     
-    memcpy(new_dir_data, &dotdot_entry, sizeof(dir_entry));
+    memcpy(new_dir_data, &double_dot_entry, sizeof(dir_entry));
     
     disk.write(new_dir_block, new_dir_data);
     
