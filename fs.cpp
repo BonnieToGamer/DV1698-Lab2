@@ -916,14 +916,14 @@ int FS::cd(std::string dirpath)
 
         //ba kollar så .. finns
         dir_entry* entries = reinterpret_cast<dir_entry*>(current_dir_block);
-        if (entries[0].file_name[0] == '\0' || strcmp(entries[0].file_name, "..") != 0)
+        if (entries[1].file_name[0] == '\0' || strcmp(entries[1].file_name, "..") != 0)
         {
             std::cout << "[FS::cd] Error: Invalid directory struct as .. wasnt found" << std::endl;
             return -1;
         }
 
         //hämtar parent dir block
-        uint16_t parent_block = entries[0].first_blk;
+        uint16_t parent_block = entries[1].first_blk;
 
         //dubbelkolla om parent ärr roooooot!
         if (parent_block == ROOT_BLOCK)
@@ -1015,16 +1015,16 @@ int FS::pwd()
             return -1;
         }
 
-        //first entry är ..
+        // andra entry är ..
         dir_entry* entries = reinterpret_cast<dir_entry*>(dir_block);
-        if (entries[0].file_name[0] == '\0' || strcmp(entries[0].file_name, "..") != 0)
+        if (entries[1].file_name[0] == '\0' || strcmp(entries[1].file_name, "..") != 0)
         {
             std::cout << "[FS::pwd] Error: Cannot read dir struct" << std::endl;
             return -1;
         }
 
         //gå till parent
-        current_block = entries[0].first_blk;
+        current_block = entries[1].first_blk;
 
         //om inte root, hitta dir namn
         if (current_block != ROOT_BLOCK)
