@@ -88,6 +88,30 @@ private:
      */
     void pad_left(std::string& string, int padding);
 
+    /**
+     * Finds an entry inside a directory
+     * @param dir_block The directory to navigate
+     * @param name Folder to navigate too
+     * @param result The resulting dir_entry will be placed here
+     * @return Status. 0 - success. -1 - error
+     */
+    int find_entry_in_dir(uint16_t dir_block, const std::string& name, dir_entry& result);
+
+    /**
+     * Navigates to a directory.
+     * @param path The path to navigate
+     * @param result_dir The resulting dir_entry
+     * @return Status. 0 - success. -1 -error
+     */
+    int navigate_to_dir(const std::string& path, dir_entry& result_dir);
+    
+    /**
+     * Splits a path into individual strings
+     * @param path The path to split
+     * @return The split path
+     */
+    std::vector<std::string> split_path(const std::string& path);
+
 public:
     FS();
     ~FS();
