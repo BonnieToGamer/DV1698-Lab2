@@ -197,9 +197,10 @@ int FS::create(const std::string& filepath)
     for (const auto& input : user_input)
         size += static_cast<int>(input.size());
 
+    size += 1; // don't forget the null terminator
+
     const int block_size = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
-
+    
     // find that many blocks
     std::vector<int16_t> blocks;
     find_empty_blocks(blocks, block_size);
@@ -257,6 +258,9 @@ int FS::create(const std::string& filepath)
         block[byte_offset++] = '\n';
         try_flush_block();
     }
+
+    block[byte_offset++] = '\0';
+    try_flush_block();
 
     // only write if we have a partial block
     if (byte_offset > 0)
