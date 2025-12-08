@@ -350,10 +350,10 @@ int FS::ls()
         const auto* entry = reinterpret_cast<dir_entry*>(&block[i]);
 
         // empty file descriptor
-        if (entry->file_name[0] == '\0')
+        if (entry->file_name[0] == '\0' || std::string(entry->file_name) == ".." || std::string(entry->file_name) == ".")
             continue;
 
-        std::cout << entry->file_name << "\t\t" << entry->size << (entry->type == TYPE_DIR ? "dir" : "file") << "\n";
+        std::cout << entry->file_name << "\t\t" << entry->size << "\t\t" << (entry->type == TYPE_DIR ? "dir" : "file") << "\n";
     }
 
     std::cout << std::flush;
