@@ -171,7 +171,7 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
     split.pop_back();
 
     uint8_t block[BLOCK_SIZE];
-    uint16_t current_block_index = current_dir.first_blk;
+    uint16_t current_block_index = path.at(0) == '/' ? ROOT_BLOCK : current_dir.first_blk;
     int16_t index = ROOT_BLOCK;
 
     for (const auto& dir : split)
@@ -217,12 +217,12 @@ bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string&
     const std::vector<std::string> split = split_path(path);
 
     uint8_t block[BLOCK_SIZE];
-    uint16_t current_block_index = current_dir.first_blk;
+    uint16_t current_block_index = path.at(0) == '/' ? ROOT_BLOCK : current_dir.first_blk;;
 
     for (int i = 0; i < split.size(); i++)
     {
         const auto& dir = split[i];
-        
+
         if (dir.size() >= 56)
         {
             ERROR_C("filename" << dir << " to long");
@@ -240,7 +240,20 @@ bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string&
 
         // we are in root block trying to go back
         if (current_block_index == ROOT_BLOCK && dir == "..")
+        {
+            if (i == split.size() - 1)
+            {
+                out = {
+                    .file_name = "",
+                    .size = 0,
+                    .first_blk = ROOT_BLOCK,
+                    .type = TYPE_DIR,
+                    .access_rights = READ | WRITE
+                };
+                return true;
+            }
             continue;
+        }
 
         dir_entry entry{};
         int16_t index = -1;
@@ -534,7 +547,7 @@ int FS::cd(std::string dirpath)
         return -1;
 
     current_dir = result;
-    
+
     return 0;
 }
 
