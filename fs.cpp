@@ -1,7 +1,7 @@
 #include <iostream>
-#include "fs.h"
-
+#include <boost/algorithm/string.hpp>
 #include <cstring>
+#include "fs.h"
 
 std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string& callee)
 {
@@ -76,10 +76,11 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
  * @param block_index The index of the block
  * @param entry_name Entry name to find
  * @param result The resulting dir entry
+ * @param index The index of the resulting dir entry
  * @param callee The caller of the function
  * @return true if success otherwise false
  */
-bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result, int& index, const std::string& callee)
+bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result, uint16_t& index, const std::string& callee)
 {
     // find the entry
     const auto* entries = reinterpret_cast<dir_entry*>(block);
@@ -124,9 +125,76 @@ bool FS::remove_dir_entry(uint8_t* block, const uint16_t block_index, dir_entry 
     return false;
 }
 
+/**
+ * Splits a path by '/' characters
+ * @param path The path to split
+ * @return The split path
+ */
+std::vector<std::string> split_path(const std::string& path)
+{
+    std::vector<std::string> result;
+    boost::split(result, path, boost::is_any_of("/"));
+
+    return result;
+}
+
 int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& callee)
 {
-    return 0;
+
+    /*
+     * Example paths:
+     * [x] file.txt 
+     * [x] ./file.txt
+     * [x] ../file.txt
+     * [x] ./test/file.txt
+     * [x] ../test/file.txt
+     * The paths should work
+     */
+
+    // check if it's just the file. aka no path
+    if (path.find('/') != std::string::npos)
+        return static_cast<int16_t>(current_dir.first_blk);
+
+    std::vector<std::string> split = split_path(path);
+    std::string file = split.back(); // get the last split element since that's the file
+    split.pop_back();
+
+    uint8_t block[BLOCK_SIZE];
+    uint16_t current_block_index = current_dir.first_blk;
+    
+    if (disk.read(current_block_index, block) != 0)
+    {
+        ERROR_C("Could not read block " << current_dir.first_blk);
+        return -1;
+    }
+
+    int16_t index = -1;
+
+    for (const auto& dir : split)
+    {
+        if (dir == ".")
+            continue;
+
+        // we are in root block trying to go back
+        if (current_block_index == ROOT_BLOCK && dir == "..")
+            continue;
+        
+        dir_entry result{};
+        if (!find_entry(block, current_block_index, dir, result, index, callee))
+        {
+            ERROR_C("Could not find dir " << dir << " in block" << current_block_index);
+            return -1;
+        }
+
+        current_block_index = result.first_blk;
+        if (disk.read(current_block_index, block) != 0)
+        {
+            ERROR_C("Could not read block " << current_dir.first_blk);
+            return -1;
+        }
+    }
+    
+    return index;
 }
 
 bool FS::write_fat_to_disk()
