@@ -3,6 +3,8 @@
 #include <cstring>
 #include "fs.h"
 
+#include <queue>
+
 std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string& callee) const
 {
     std::vector<uint16_t> blocks;
@@ -446,6 +448,61 @@ int FS::cat(const std::string& filepath)
 int FS::ls()
 {
     std::cout << "FS::ls()\n";
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(current_dir.first_blk, block) != 0)
+    {
+        ERROR("ls", "could not read block " << current_dir.first_blk);
+        return -1;
+    }
+
+    const dir_entry* entries = reinterpret_cast<dir_entry*>(block);
+    constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
+
+    // puts lexicographically smallest filename first
+    auto cmp = [](const dir_entry& a, const dir_entry& b)
+    {
+        return std::strcmp(a.file_name, b.file_name) < 0;
+    };
+
+    std::priority_queue<dir_entry, std::vector<dir_entry>, decltype(cmp)> pq(cmp);
+
+    for (int i = 0; i < size; i++)
+    {
+        const dir_entry entry = entries[i];
+        if (is_entry_empty(entry))
+            continue;
+
+        pq.push(entry);
+    }
+
+    auto check_access = [](const uint8_t access_rights, const uint8_t right, const char right_str, std::string& str)
+    {
+        if ((access_rights & right) == right)
+            str += right_str;
+        else
+            str += '-';
+    };
+
+    std::cout << "name\t type\t accessrights\t size\n";
+    
+    while (!pq.empty())
+    {
+        const auto entry = pq.top();
+        pq.pop();
+
+        std::string access_str;
+        check_access(entry.access_rights, READ, 'r', access_str);
+        check_access(entry.access_rights, WRITE, 'w', access_str);
+        check_access(entry.access_rights, EXECUTE, 'x', access_str);
+
+        std::cout
+            << entry.file_name << "\t "
+            << (entry.type == TYPE_DIR ? "dir" : "file") << "\t "
+            << access_str << "\t "
+            << (entry.type == TYPE_DIR ? "-" : std::to_string(entry.size)) << "\n";
+    }
+
     return 0;
 }
 
