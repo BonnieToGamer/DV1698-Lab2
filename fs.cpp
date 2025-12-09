@@ -9,7 +9,7 @@ std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string&
 
     for (const auto block: fat)
     {
-        if (block == -1)
+        if (block == FAT_FREE)
         {
             blocks.emplace_back(block);
             if (blocks.size() == amount)
