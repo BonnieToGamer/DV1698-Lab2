@@ -205,10 +205,10 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
             ERROR_C(dir << " is not a dir or we don't have permission");
             return -1;
         }
-        
+
         current_block_index = result.first_blk;
         index = current_block_index;
-        
+
         if (disk.read(current_block_index, block) != 0)
         {
             ERROR_C("Could not read block " << current_dir.first_blk);
@@ -459,7 +459,7 @@ int FS::mkdir(std::string dirpath)
 
     if (!add_dir_entry(block, block_index, new_entry, "mkdir"))
         return -1;
- 
+
     std::memset(block, 0, sizeof(block));
 
     const dir_entry parent_entry = {
@@ -472,7 +472,7 @@ int FS::mkdir(std::string dirpath)
 
     if (!add_dir_entry(block, result[0], parent_entry, "mkdir"))
         return -1;
-    
+
     return 0;
 }
 
@@ -510,10 +510,10 @@ int FS::cd(std::string dirpath)
             .type = TYPE_DIR,
             .access_rights = READ | WRITE | EXECUTE
         };
-        
+
         return 0;
     }
-    
+
     dir_entry result{};
     int16_t index = -1;
     if (!find_entry(block, block_index, "..", result, index, "cd"))
@@ -527,9 +527,9 @@ int FS::cd(std::string dirpath)
 
     if (!find_entry(block, result.first_blk, dir_name, result, index, "cd"))
         return -1;
-    
+
     current_dir = result;
-    
+
     return 0;
 }
 
