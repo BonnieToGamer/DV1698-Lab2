@@ -7,11 +7,12 @@ std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string&
 {
     std::vector<uint16_t> blocks;
 
-    for (const auto block: fat)
+    for (int i = 0; i < BLOCK_SIZE / 2; i++)
     {
+        const auto block = fat[i];
         if (block == FAT_FREE)
         {
-            blocks.emplace_back(block);
+            blocks.emplace_back(i);
             if (blocks.size() == amount)
                 return blocks;
         }
@@ -80,7 +81,7 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
  * @param callee The caller of the function
  * @return true if success otherwise false
  */
-bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result, uint16_t& index, const std::string& callee)
+bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result, int16_t& index, const std::string& callee)
 {
     // find the entry
     const auto* entries = reinterpret_cast<dir_entry*>(block);
@@ -105,7 +106,7 @@ bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& e
 bool FS::remove_dir_entry(uint8_t* block, const uint16_t block_index, dir_entry remove_entry, const std::string& callee)
 {
     dir_entry result{};
-    int index = 0;
+    int16_t index = 0;
     if (find_entry(block, block_index, std::string(remove_entry.file_name), result, index, callee))
     {
         if (is_entry_empty(result))
@@ -138,7 +139,7 @@ std::vector<std::string> split_path(const std::string& path)
     return result;
 }
 
-int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& callee)
+int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_name, const std::string& callee)
 {
 
     /*
@@ -152,11 +153,20 @@ int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& ca
      */
 
     // check if it's just the file. aka no path
-    if (path.find('/') != std::string::npos)
+    if (path.find('/') == std::string::npos)
+    {
+        file_name = path;
+        if (file_name.size() >= 56)
+        {
+            ERROR_C("filename" << file_name << " to long");
+            return -1;
+        }
+        
         return static_cast<int16_t>(current_dir.first_blk);
+    }
 
     std::vector<std::string> split = split_path(path);
-    std::string file = split.back(); // get the last split element since that's the file
+    file_name = split.back(); // get the last split element since that's the file
     split.pop_back();
 
     uint8_t block[BLOCK_SIZE];
@@ -172,6 +182,12 @@ int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& ca
 
     for (const auto& dir : split)
     {
+        if (dir.size() >= 56)
+        {
+            ERROR_C("filename" << dir << " to long");
+            return -1;
+        }
+        
         if (dir == ".")
             continue;
 
@@ -197,9 +213,29 @@ int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& ca
     return index;
 }
 
+bool FS::add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const std::string& callee)
+{
+    for (int i = 0; i < blocks.size(); i++)
+    {
+        const auto block = blocks[i];
+        if (i < blocks.size() - 1)
+            fat[block] = static_cast<int16_t>(blocks[i + 1]);
+        else
+            fat[block] = FAT_EOF;
+    }
+
+    if (!write_fat_to_disk())
+    {
+        ERROR_C("could not write fat to disk");
+        return false;
+    }
+
+    return true;
+}
+
 bool FS::write_fat_to_disk()
 {
-    return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat));
+    return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat)) == 0;
 }
 
 FS::FS()
@@ -238,6 +274,89 @@ int FS::format()
 int FS::create(std::string filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
+
+    std::vector<std::string> user_input;
+    while (true)
+    {
+        std::string line;
+        std::getline(std::cin, line);
+
+        if (line.empty())
+            break;
+
+        user_input.emplace_back(line);
+    }
+
+    uint32_t size = 0;
+    for (const auto& input : user_input)
+        size += static_cast<int>(input.size()) + 1;
+
+    const int block_count = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    std::string file_name;
+    const int16_t dir_block = navigate_to_dir_block(filepath, file_name, "create");
+
+    if (dir_block != 0)
+        return -1;
+    
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(dir_block, block) != 0)
+    {
+        ERROR("create", "could not read block " << dir_block);
+        return -1;
+    }
+
+    const std::vector<uint16_t> empty_blocks = find_empty_blocks(block_count, "create");
+
+    if (empty_blocks.empty())
+        return -1;
+
+    if (!add_blocks_to_fat(empty_blocks, "create"))
+        return -1;
+
+    dir_entry new_entry = {
+        .file_name = "",
+        .size = size,
+        .first_blk = empty_blocks[0],
+        .type = TYPE_FILE,
+        .access_rights = READ | WRITE
+    };
+
+    std::strncpy(new_entry.file_name, file_name.c_str(), sizeof(new_entry.file_name) - 1);
+    
+    if (!add_dir_entry(block, dir_block, new_entry, "create"))
+        return -1;
+    
+    int byte_offset = 0;
+    int block_offset = 0;
+
+    std::memset(block, 0, BLOCK_SIZE);
+
+    auto flush_block_if_full = [&]()
+    {
+        if (byte_offset == BLOCK_SIZE)
+        {
+            disk.write(empty_blocks[block_offset], block);
+            byte_offset = 0;
+            block_offset++;
+            std::memset(block, 0, BLOCK_SIZE);
+        }
+    };
+
+    for (const auto& input : user_input)
+    {
+        for (const char c : input)
+        {
+            block[byte_offset++] = static_cast<uint8_t>(c);
+            flush_block_if_full();
+        }
+        block[byte_offset++] = '\n';
+        flush_block_if_full();
+    }
+
+    if (byte_offset > 0)
+        disk.write(empty_blocks[block_offset], block);
+    
     return 0;
 }
 

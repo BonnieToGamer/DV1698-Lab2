@@ -69,11 +69,20 @@ private:
     /**
      * Takes a path and navigates to the end block and returns it
      * @param path The path to navigate
+     * @param file_name The resulting file name
      * @param callee The caller of the function
      * @return The block that has the end path. -1 if failure
      */
-    int16_t navigate_to_dir_block(const std::string& path, const std::string& callee);
-
+    int16_t navigate_to_dir_block(const std::string& path, std::string& file_name, const std::string& callee);
+    
+    /**
+     * Adds a vector of blocks to the fat.
+     * @param blocks The blocks to add
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     */
+    bool add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const std::string& callee);
+    
     /**
      * Write's the current FAT to disk
      * @return Status, true if success otherwise false
