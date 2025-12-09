@@ -100,7 +100,7 @@ bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& e
         }
     }
 
-    ERROR_C("Could not find entry with name " << entry_name << "in block " << block_index);
+    ERROR_C("Could not find entry with name " << entry_name << " in block " << block_index);
 
     return false;
 }
@@ -198,11 +198,14 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
 
         dir_entry result{};
         if (!find_entry(block, current_block_index, dir, result, index, callee))
+            return -1;
+
+        if (result.type != TYPE_DIR && (result.access_rights & EXECUTE) == 0)
         {
-            ERROR_C("Could not find dir " << dir << " in block" << current_block_index);
+            ERROR_C(dir << " is not a dir or we don't have permission");
             return -1;
         }
-
+        
         current_block_index = result.first_blk;
         if (disk.read(current_block_index, block) != 0)
         {
@@ -463,8 +466,8 @@ int FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
 
-    // remove last '/' so we make it an actual dir
-    if (dirpath.back() == '/')
+    // add last '/' so we make it an actual dir
+    if (dirpath.back() != '/')
         dirpath += "/";
 
     std::string dir_name;
