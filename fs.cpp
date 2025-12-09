@@ -82,11 +82,11 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
  * @param callee The caller of the function
  * @return true if success otherwise false
  */
-bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result,
+bool find_entry(const uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result,
                 int16_t& index, const std::string& callee)
 {
     // find the entry
-    const auto* entries = reinterpret_cast<dir_entry*>(block);
+    const auto* entries = reinterpret_cast<const dir_entry*>(block);
     constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
 
     for (int i = 0; i < size; i++)
@@ -95,7 +95,7 @@ bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& e
         if (std::strcmp(entry.file_name, entry_name.c_str()) == 0)
         {
             std::memcpy(&result, &entry, sizeof(dir_entry));
-            index = i;
+            index = static_cast<int16_t>(i);
             return true;
         }
     }
@@ -207,7 +207,7 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
         }
 
         current_block_index = result.first_blk;
-        index = current_block_index;
+        index = static_cast<int16_t>(current_block_index);
 
         if (disk.read(current_block_index, block) != 0)
         {
@@ -289,7 +289,7 @@ int FS::format()
 
 // create <filepath> creates a new file on the disk, the data content is
 // written on the following rows (ended with an empty row)
-int FS::create(std::string filepath)
+int FS::create(const std::string& filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
 
@@ -309,7 +309,7 @@ int FS::create(std::string filepath)
     for (const auto& input : user_input)
         size += static_cast<int>(input.size()) + 1;
 
-    const int block_count = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    const int block_count = (static_cast<int>(size) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     std::string file_name;
     const int16_t dir_block = navigate_to_dir_block(filepath, file_name, "create");
@@ -379,7 +379,7 @@ int FS::create(std::string filepath)
 }
 
 // cat <filepath> reads the content of a file and prints it on the screen
-int FS::cat(std::string filepath)
+int FS::cat(const std::string& filepath)
 {
     std::cout << "FS::cat(" << filepath << ")\n";
     return 0;
@@ -394,22 +394,22 @@ int FS::ls()
 
 // cp <sourcepath> <destpath> makes an exact copy of the file
 // <sourcepath> to a new file <destpath>
-int FS::cp(std::string sourcepath, std::string destpath)
+int FS::cp(const std::string& source_path, const std::string& dest_path)
 {
-    std::cout << "FS::cp(" << sourcepath << "," << destpath << ")\n";
+    std::cout << "FS::cp(" << source_path << "," << dest_path << ")\n";
     return 0;
 }
 
 // mv <sourcepath> <destpath> renames the file <sourcepath> to the name <destpath>,
 // or moves the file <sourcepath> to the directory <destpath> (if dest is a directory)
-int FS::mv(std::string sourcepath, std::string destpath)
+int FS::mv(const std::string& source_path, const std::string& dest_path)
 {
-    std::cout << "FS::mv(" << sourcepath << "," << destpath << ")\n";
+    std::cout << "FS::mv(" << source_path << "," << dest_path << ")\n";
     return 0;
 }
 
 // rm <filepath> removes / deletes the file <filepath>
-int FS::rm(std::string filepath)
+int FS::rm(const std::string& filepath)
 {
     std::cout << "FS::rm(" << filepath << ")\n";
     return 0;
@@ -417,7 +417,7 @@ int FS::rm(std::string filepath)
 
 // append <filepath1> <filepath2> appends the contents of file <filepath1> to
 // the end of file <filepath2>. The file <filepath1> is unchanged.
-int FS::append(std::string filepath1, std::string filepath2)
+int FS::append(const std::string& filepath1, const std::string& filepath2)
 {
     std::cout << "FS::append(" << filepath1 << "," << filepath2 << ")\n";
     return 0;
@@ -425,7 +425,7 @@ int FS::append(std::string filepath1, std::string filepath2)
 
 // mkdir <dirpath> creates a new sub-directory with the name <dirpath>
 // in the current directory
-int FS::mkdir(std::string dirpath)
+int FS::mkdir(const std::string& dirpath)
 {
     std::cout << "FS::mkdir(" << dirpath << ")\n";
 
@@ -486,7 +486,7 @@ int FS::cd(std::string dirpath)
         dirpath += "/";
 
     std::string dir_name;
-    const int16_t block_index = navigate_to_dir_block(dirpath, dir_name, "mkdir");
+    const int16_t block_index = navigate_to_dir_block(dirpath, dir_name, "cd");
     if (block_index == -1)
         return -1;
 
@@ -543,8 +543,8 @@ int FS::pwd()
 
 // chmod <accessrights> <filepath> changes the access rights for the
 // file <filepath> to <accessrights>.
-int FS::chmod(std::string accessrights, std::string filepath)
+int FS::chmod(const std::string& access_rights, const std::string& filepath)
 {
-    std::cout << "FS::chmod(" << accessrights << "," << filepath << ")\n";
+    std::cout << "FS::chmod(" << access_rights << "," << filepath << ")\n";
     return 0;
 }

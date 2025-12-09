@@ -97,27 +97,27 @@ public:
     int format();
     // create <filepath> creates a new file on the disk, the data content is
     // written on the following rows (ended with an empty row)
-    int create(std::string filepath);
+    int create(const std::string& filepath);
     // cat <filepath> reads the content of a file and prints it on the screen
-    int cat(std::string filepath);
+    int cat(const std::string& filepath);
     // ls lists the content in the current directory (files and sub-directories)
     int ls();
 
     // cp <sourcepath> <destpath> makes an exact copy of the file
     // <sourcepath> to a new file <destpath>
-    int cp(std::string sourcepath, std::string destpath);
+    int cp(const std::string& source_path, const std::string& dest_path);
     // mv <sourcepath> <destpath> renames the file <sourcepath> to the name <destpath>,
     // or moves the file <sourcepath> to the directory <destpath> (if dest is a directory)
-    int mv(std::string sourcepath, std::string destpath);
+    int mv(const std::string& source_path, const std::string& dest_path);
     // rm <filepath> removes / deletes the file <filepath>
-    int rm(std::string filepath);
+    int rm(const std::string& filepath);
     // append <filepath1> <filepath2> appends the contents of file <filepath1> to
     // the end of file <filepath2>. The file <filepath1> is unchanged.
-    int append(std::string filepath1, std::string filepath2);
+    int append(const std::string& filepath1, const std::string& filepath2);
 
     // mkdir <dirpath> creates a new sub-directory with the name <dirpath>
     // in the current directory
-    int mkdir(std::string dirpath);
+    int mkdir(const std::string& dirpath);
     // cd <dirpath> changes the current (working) directory to the directory named <dirpath>
     int cd(std::string dirpath);
     // pwd prints the full path, i.e., from the root directory, to the current
@@ -126,7 +126,7 @@ public:
 
     // chmod <accessrights> <filepath> changes the access rights for the
     // file <filepath> to <accessrights>.
-    int chmod(std::string accessrights, std::string filepath);
+    int chmod(const std::string& access_rights, const std::string& filepath);
 };
 
 #endif // __FS_H__
