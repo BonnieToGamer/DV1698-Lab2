@@ -457,7 +457,20 @@ int FS::mkdir(std::string dirpath)
 
     if (!add_dir_entry(block, block_index, new_entry, "mkdir"))
         return -1;
+ 
+    std::memset(block, 0, sizeof(block));
 
+    const dir_entry parent_entry = {
+        .file_name = "..",
+        .size = 0,
+        .first_blk = static_cast<uint16_t>(block_index),
+        .type = TYPE_DIR,
+        .access_rights = READ | WRITE | EXECUTE
+    };
+
+    if (!add_dir_entry(block, result[0], parent_entry, "mkdir"))
+        return -1;
+    
     return 0;
 }
 
