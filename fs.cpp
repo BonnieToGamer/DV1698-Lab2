@@ -33,16 +33,8 @@ bool is_entry_empty(const dir_entry& entry)
     return entry.file_name[0] == '\0';
 }
 
-bool FS::add_dir_entry(const uint16_t block_index, dir_entry new_entry, const std::string& callee)
-{
-    // read block
-    uint8_t block[BLOCK_SIZE];
-    if (disk.read(block_index, block) != 0)
-    {
-        ERROR_C("Could not read block " << block_index);
-        return false;
-    }
-    
+bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_entry& new_entry, const std::string& callee)
+{    
     // find empty space
     const auto* entries = reinterpret_cast<dir_entry*>(block);
     constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
@@ -78,12 +70,63 @@ bool FS::add_dir_entry(const uint16_t block_index, dir_entry new_entry, const st
     return true;
 }
 
-bool FS::remove_dir_entry(uint16_t block, dir_entry entry, const std::string& callee)
+/**
+ * Searches for a dir entry with the name entry_name
+ * @param block Block to search
+ * @param block_index The index of the block
+ * @param entry_name Entry name to find
+ * @param result The resulting dir entry
+ * @param callee The caller of the function
+ * @return true if success otherwise false
+ */
+bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result, int& index, const std::string& callee)
 {
+    // find the entry
+    const auto* entries = reinterpret_cast<dir_entry*>(block);
+    constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
+
+    for (int i = 0; i < size; i++)
+    {
+        const auto& entry = entries[i];
+        if (std::strcmp(entry.file_name, entry_name.c_str()) == 0)
+        {
+            std::memcpy(&result, &entry, sizeof(dir_entry));
+            index = i;
+            return true;
+        }
+    }
+    
+    ERROR_C("Could not find entry with name " << entry_name << "in block " << block_index);
+    
+    return false;
+}
+
+bool FS::remove_dir_entry(uint8_t* block, const uint16_t block_index, dir_entry remove_entry, const std::string& callee)
+{
+    dir_entry result{};
+    int index = 0;
+    if (find_entry(block, block_index, std::string(remove_entry.file_name), result, index, callee))
+    {
+        if (is_entry_empty(result))
+            return false;
+
+        std::memset(block + index * sizeof(dir_entry), 0, sizeof(dir_entry));
+
+        if (disk.write(block_index, block) != 0)
+        {
+            ERROR_C("Could not write to block " << block_index);
+            return false;
+        }
+        
+        return true;
+    }
+
+    return false;
 }
 
 int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& callee)
 {
+    return 0;
 }
 
 bool FS::write_fat_to_disk()

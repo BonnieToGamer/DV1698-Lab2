@@ -35,7 +35,7 @@ private:
     Disk disk;
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE/2];
-
+    
     /**
      * Find an amount of empty blocks
      * @param amount Amount of blocks to find
@@ -46,21 +46,23 @@ private:
     
     /**
      * Adds a new dir entry to block
-     * @param block_index Block to add to
+     * @param block Block to add to
+     * @param block_index The index of the block
      * @param new_entry Entry to add
      * @param callee The caller of the function
      * @return true if success otherwise false
      */
-    bool add_dir_entry(uint16_t block_index, dir_entry new_entry, const std::string& callee);
-
+    bool add_dir_entry(uint8_t* block, uint16_t block_index, const dir_entry& new_entry, const std::string& callee);
+    
     /**
      * Removes a dir entry from a block
      * @param block Block to remove from
-     * @param entry Entry to remove
+     * @param block_index The index of the block
+     * @param remove_entry Entry to remove
      * @param callee The caller of the function
      * @return true if success otherwise false
      */
-    bool remove_dir_entry(uint16_t block, dir_entry entry, const std::string& callee);
+    bool remove_dir_entry(uint8_t* block, uint16_t block_index, dir_entry remove_entry, const std::string& callee);
 
     /**
      * Takes a path and navigates to the end block and returns it
