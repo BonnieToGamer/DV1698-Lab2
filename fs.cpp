@@ -312,7 +312,7 @@ int FS::create(std::string filepath)
     std::string file_name;
     const int16_t dir_block = navigate_to_dir_block(filepath, file_name, "create");
 
-    if (dir_block != 0)
+    if (dir_block == -1)
         return -1;
 
     uint8_t block[BLOCK_SIZE];
