@@ -82,10 +82,11 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
  * @param result The resulting dir entry
  * @param index The index of the resulting dir entry
  * @param callee The caller of the function
+ * @param print_error If true it prints an error message if entry is not found
  * @return true if success otherwise false
  */
 bool find_entry(const uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result,
-                int16_t& index, const std::string& callee)
+                int16_t& index, const std::string& callee, const bool print_error = true)
 {
     // find the entry
     const auto* entries = reinterpret_cast<const dir_entry*>(block);
@@ -102,7 +103,8 @@ bool find_entry(const uint8_t* block, const uint16_t block_index, const std::str
         }
     }
 
-    ERROR_C("Could not find entry with name " << entry_name << " in block " << block_index);
+    if (print_error)
+        ERROR_C("Could not find entry with name " << entry_name << " in block " << block_index);
 
     return false;
 }
@@ -620,6 +622,21 @@ int FS::mkdir(const std::string& dirpath)
     if (block_index == -1)
         return -1;
 
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(block_index, block) != 0)
+    {
+        ERROR("mkdir", "could not read block " << block_index);
+        return -1;
+    }
+
+    dir_entry result_entry{};
+    int16_t index;
+    if (find_entry(block, block_index, dir_name, result_entry, index, "mkdir", false))
+    {
+        ERROR("mkdir", "there already exists a file or directory with this name");
+        return -1;
+    }
+
     const std::vector<uint16_t> result = find_empty_blocks(1, "mkdir");
     if (result.empty())
         return -1;
@@ -636,7 +653,6 @@ int FS::mkdir(const std::string& dirpath)
 
     std::strncpy(new_entry.file_name, dir_name.c_str(), sizeof(new_entry.file_name) - 1);
 
-    uint8_t block[BLOCK_SIZE];
     if (disk.read(block_index, block) != 0)
     {
         ERROR("mkdir", "could not read block " << block_index);
