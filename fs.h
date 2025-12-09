@@ -1,5 +1,8 @@
 #include <iostream>
 #include <cstdint>
+#include <string>
+#include <vector>
+
 #include "disk.h"
 
 #ifndef __FS_H__
@@ -29,6 +32,47 @@ private:
     Disk disk;
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE/2];
+
+    /**
+     * Find an amount of empty blocks
+     * @param amount Amount of blocks to find
+     * @param callee The caller of the function
+     * @return The found blocks
+     */
+    std::vector<uint16_t> find_empty_blocks(int amount, const std::string& callee);
+
+    /**
+     * Adds a new dir entry to block
+     * @param block Block to add to
+     * @param entry Entry to add
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     */
+    bool add_dir_entry(uint16_t block, dir_entry entry, const std::string& callee);
+
+    /**
+     * Removes a dir entry from a block
+     * @param block Block to remove from
+     * @param entry Entry to remove
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     */
+    bool remove_dir_entry(uint16_t block, dir_entry entry, const std::string& callee);
+
+    /**
+     * Takes a path and navigates to the end block and returns it
+     * @param path The path to navigate
+     * @param callee The caller of the function
+     * @return The block that has the end path. -1 if failure
+     */
+    int16_t navigate_to_dir_block(const std::string& path, const std::string& callee);
+
+    /**
+     * Write's the current FAT to disk
+     * @return Status, true if success otherwise false
+     * @note Should be called every time fat is written to
+     */
+    bool write_fat_to_disk();
 
 public:
     FS();
