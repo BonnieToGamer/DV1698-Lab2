@@ -3,7 +3,7 @@
 #include <cstring>
 #include "fs.h"
 
-std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string& callee)
+std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string& callee) const
 {
     std::vector<uint16_t> blocks;
 
@@ -34,8 +34,9 @@ bool is_entry_empty(const dir_entry& entry)
     return entry.file_name[0] == '\0';
 }
 
-bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_entry& new_entry, const std::string& callee)
-{    
+bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_entry& new_entry,
+                       const std::string& callee)
+{
     // find empty space
     const auto* entries = reinterpret_cast<dir_entry*>(block);
     constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
@@ -57,10 +58,10 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
         ERROR_C("Could not find empty dir entry in block " << block_index);
         return false;
     }
-    
+
     // write it there
     std::memcpy(block + index * sizeof(dir_entry), &new_entry, sizeof(dir_entry));
-    
+
     // write to disk
     if (disk.write(block_index, block) != 0)
     {
@@ -81,7 +82,8 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
  * @param callee The caller of the function
  * @return true if success otherwise false
  */
-bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result, int16_t& index, const std::string& callee)
+bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& entry_name, dir_entry& result,
+                int16_t& index, const std::string& callee)
 {
     // find the entry
     const auto* entries = reinterpret_cast<dir_entry*>(block);
@@ -97,9 +99,9 @@ bool find_entry(uint8_t* block, const uint16_t block_index, const std::string& e
             return true;
         }
     }
-    
+
     ERROR_C("Could not find entry with name " << entry_name << "in block " << block_index);
-    
+
     return false;
 }
 
@@ -119,7 +121,7 @@ bool FS::remove_dir_entry(uint8_t* block, const uint16_t block_index, dir_entry 
             ERROR_C("Could not write to block " << block_index);
             return false;
         }
-        
+
         return true;
     }
 
@@ -141,7 +143,6 @@ std::vector<std::string> split_path(const std::string& path)
 
 int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_name, const std::string& callee)
 {
-
     /*
      * Example paths:
      * [x] file.txt 
@@ -161,7 +162,7 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
             ERROR_C("filename" << file_name << " to long");
             return -1;
         }
-        
+
         return static_cast<int16_t>(current_dir.first_blk);
     }
 
@@ -171,7 +172,7 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
 
     uint8_t block[BLOCK_SIZE];
     uint16_t current_block_index = current_dir.first_blk;
-    
+
     if (disk.read(current_block_index, block) != 0)
     {
         ERROR_C("Could not read block " << current_dir.first_blk);
@@ -187,14 +188,14 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
             ERROR_C("filename" << dir << " to long");
             return -1;
         }
-        
+
         if (dir == ".")
             continue;
 
         // we are in root block trying to go back
         if (current_block_index == ROOT_BLOCK && dir == "..")
             continue;
-        
+
         dir_entry result{};
         if (!find_entry(block, current_block_index, dir, result, index, callee))
         {
@@ -209,7 +210,7 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
             return -1;
         }
     }
-    
+
     return index;
 }
 
@@ -247,7 +248,7 @@ FS::FS() : fat{}
         ERROR("FS", "could not read FAT block");
         return;
     }
-    
+
     current_dir = {
         .file_name = "",
         .size = 0,
@@ -277,7 +278,7 @@ int FS::format()
         ERROR("format", "could not write to root block");
         return -1;
     }
-    
+
     return 0;
 }
 
@@ -310,7 +311,7 @@ int FS::create(std::string filepath)
 
     if (dir_block != 0)
         return -1;
-    
+
     uint8_t block[BLOCK_SIZE];
     if (disk.read(dir_block, block) != 0)
     {
@@ -335,10 +336,10 @@ int FS::create(std::string filepath)
     };
 
     std::strncpy(new_entry.file_name, file_name.c_str(), sizeof(new_entry.file_name) - 1);
-    
+
     if (!add_dir_entry(block, dir_block, new_entry, "create"))
         return -1;
-    
+
     int byte_offset = 0;
     int block_offset = 0;
 
@@ -368,7 +369,7 @@ int FS::create(std::string filepath)
 
     if (byte_offset > 0)
         disk.write(empty_blocks[block_offset], block);
-    
+
     return 0;
 }
 
@@ -422,6 +423,38 @@ int FS::append(std::string filepath1, std::string filepath2)
 int FS::mkdir(std::string dirpath)
 {
     std::cout << "FS::mkdir(" << dirpath << ")\n";
+
+    std::string dir_name;
+    const int16_t block_index = navigate_to_dir_block(dirpath, dir_name, "mkdir");
+    if (block_index == -1)
+        return -1;
+
+    const std::vector<uint16_t> result = find_empty_blocks(1, "mkdir");
+    if (result.empty())
+        return -1;
+
+    add_blocks_to_fat(result, "mkdir");
+
+    dir_entry new_entry = {
+        .file_name = "",
+        .size = 0,
+        .first_blk = result[0],
+        .type = TYPE_DIR,
+        .access_rights = READ | WRITE | EXECUTE
+    };
+
+    std::strncpy(new_entry.file_name, dir_name.c_str(), sizeof(new_entry.file_name) - 1);
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(block_index, block) != 0)
+    {
+        ERROR("mkdir", "could not read block " << block_index);
+        return -1;
+    }
+
+    if (!add_dir_entry(block, block_index, new_entry, "mkdir"))
+        return -1;
+
     return 0;
 }
 

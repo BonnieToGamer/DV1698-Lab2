@@ -44,7 +44,7 @@ private:
      * @param callee The caller of the function
      * @return The found blocks
      */
-    std::vector<uint16_t> find_empty_blocks(int amount, const std::string& callee);
+    std::vector<uint16_t> find_empty_blocks(int amount, const std::string& callee) const;
     
     /**
      * Adds a new dir entry to block
