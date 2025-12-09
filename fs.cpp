@@ -1,6 +1,96 @@
 #include <iostream>
 #include "fs.h"
 
+#include <cstring>
+
+std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string& callee)
+{
+    std::vector<uint16_t> blocks;
+
+    for (const auto block: fat)
+    {
+        if (block == -1)
+        {
+            blocks.emplace_back(block);
+            if (blocks.size() == amount)
+                return blocks;
+        }
+    }
+
+    if (blocks.size() != amount)
+        ERROR_C("Could not find enough empty blocks");
+    
+    return blocks;
+}
+
+/**
+ * Checks if a dir entry is empty
+ * @param entry The entry to check
+ * @return true if empty, otherwise has data
+ */
+bool is_entry_empty(const dir_entry& entry)
+{
+    return entry.file_name[0] == '\0';
+}
+
+bool FS::add_dir_entry(const uint16_t block_index, dir_entry new_entry, const std::string& callee)
+{
+    // read block
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(block_index, block) != 0)
+    {
+        ERROR_C("Could not read block " << block_index);
+        return false;
+    }
+    
+    // find empty space
+    const auto* entries = reinterpret_cast<dir_entry*>(block);
+    constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
+    int index = 0;
+    bool found_empty = false;
+
+    for (; index < size; index++)
+    {
+        const auto& entry = entries[index];
+        if (is_entry_empty(entry))
+        {
+            found_empty = true;
+            break;
+        }
+    }
+
+    if (!found_empty)
+    {
+        ERROR_C("Could not find empty dir entry in block " << block_index);
+        return false;
+    }
+    
+    // write it there
+    std::memcpy(block + index * sizeof(dir_entry), &new_entry, sizeof(dir_entry));
+    
+    // write to disk
+    if (disk.write(block_index, block) != 0)
+    {
+        ERROR_C("Could not write block" << block_index << " to disk");
+        return false;
+    }
+
+    return true;
+}
+
+bool FS::remove_dir_entry(uint16_t block, dir_entry entry, const std::string& callee)
+{
+}
+
+int16_t FS::navigate_to_dir_block(const std::string& path, const std::string& callee)
+{
+}
+
+bool FS::write_fat_to_disk()
+{
+    return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat));
+}
+
 FS::FS()
 {
     std::cout << "FS::FS()... Creating file system\n";

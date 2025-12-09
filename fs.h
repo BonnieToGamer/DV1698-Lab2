@@ -19,6 +19,9 @@
 #define WRITE 0x02
 #define EXECUTE 0x01
 
+#define ERROR(callee, message) std::cout << "[FS::" << callee << "] Error: " << message << "\n"
+#define ERROR_C(message) std::cout << "[FS::" << callee << "] Error: " << message << "\n"
+
 struct dir_entry {
     char file_name[56]; // name of the file / sub-directory
     uint32_t size; // size of the file in bytes
@@ -40,15 +43,15 @@ private:
      * @return The found blocks
      */
     std::vector<uint16_t> find_empty_blocks(int amount, const std::string& callee);
-
+    
     /**
      * Adds a new dir entry to block
-     * @param block Block to add to
-     * @param entry Entry to add
+     * @param block_index Block to add to
+     * @param new_entry Entry to add
      * @param callee The caller of the function
      * @return true if success otherwise false
      */
-    bool add_dir_entry(uint16_t block, dir_entry entry, const std::string& callee);
+    bool add_dir_entry(uint16_t block_index, dir_entry new_entry, const std::string& callee);
 
     /**
      * Removes a dir entry from a block
