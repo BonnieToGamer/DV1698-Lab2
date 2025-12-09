@@ -179,7 +179,7 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
         return -1;
     }
 
-    int16_t index = -1;
+    int16_t index = ROOT_BLOCK;
 
     for (const auto& dir : split)
     {
@@ -207,6 +207,8 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
         }
         
         current_block_index = result.first_blk;
+        index = current_block_index;
+        
         if (disk.read(current_block_index, block) != 0)
         {
             ERROR_C("Could not read block " << current_dir.first_blk);
@@ -499,11 +501,33 @@ int FS::cd(std::string dirpath)
     const std::vector<std::string> split = split_path(dirpath);
     dir_name = split.back();
 
+    if (block_index == ROOT_BLOCK)
+    {
+        current_dir = {
+            .file_name = "",
+            .size = 0,
+            .first_blk = ROOT_BLOCK,
+            .type = TYPE_DIR,
+            .access_rights = READ | WRITE | EXECUTE
+        };
+        
+        return 0;
+    }
+    
     dir_entry result{};
     int16_t index = -1;
-    if (!find_entry(block, block_index, dir_name, result, index, "cd"))
+    if (!find_entry(block, block_index, "..", result, index, "cd"))
         return -1;
 
+    if (disk.read(result.first_blk, block) != 0)
+    {
+        ERROR("cd", "could not read block " << block_index);
+        return -1;
+    }
+
+    if (!find_entry(block, result.first_blk, dir_name, result, index, "cd"))
+        return -1;
+    
     current_dir = result;
     
     return 0;
