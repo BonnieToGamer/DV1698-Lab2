@@ -252,7 +252,7 @@ bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string&
                     .size = 0,
                     .first_blk = ROOT_BLOCK,
                     .type = TYPE_DIR,
-                    .access_rights = READ | WRITE
+                    .access_rights = READ | WRITE | EXECUTE
                 };
                 return true;
             }
@@ -678,12 +678,16 @@ int FS::mkdir(const std::string& dirpath)
 
     std::memset(block, 0, sizeof(block));
 
+    // get permissions of parent
+    if (!lookup_path("..", result_entry, "mkdir"))
+        return -1;
+
     const dir_entry parent_entry = {
         .file_name = "..",
         .size = 0,
         .first_blk = static_cast<uint16_t>(block_index),
         .type = TYPE_DIR,
-        .access_rights = READ | WRITE | EXECUTE
+        .access_rights = result_entry.access_rights
     };
 
     if (!add_dir_entry(block, result[0], parent_entry, "mkdir"))
