@@ -73,7 +73,19 @@ private:
      * @param callee The caller of the function
      * @return The block that has the end path. -1 if failure
      */
-    int16_t navigate_to_dir_block(const std::string& path, std::string& file_name, const std::string& callee);
+    int16_t walk_path(const std::string& path, std::string& file_name, const std::string& callee);
+
+    /**
+     * Tries to walk the path to the end and returns the final dir_entry
+     * @param path The path to navigate
+     * @param out The resulting dir_entry
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     * @note This is different from walk_path. walk_path goes only until
+     * it finds the directory that a file at the end should go in. This
+     * is only for directory traversing.
+     */
+    bool lookup_path(const std::string& path, dir_entry& out, const std::string& callee);
     
     /**
      * Adds a vector of blocks to the fat.

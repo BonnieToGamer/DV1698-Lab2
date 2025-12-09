@@ -141,7 +141,7 @@ std::vector<std::string> split_path(const std::string& path)
     return result;
 }
 
-int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_name, const std::string& callee)
+int16_t FS::walk_path(const std::string& path, std::string& file_name, const std::string& callee)
 {
     /*
      * Example paths:
@@ -172,13 +172,6 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
 
     uint8_t block[BLOCK_SIZE];
     uint16_t current_block_index = current_dir.first_blk;
-
-    if (disk.read(current_block_index, block) != 0)
-    {
-        ERROR_C("Could not read block " << current_dir.first_blk);
-        return -1;
-    }
-
     int16_t index = ROOT_BLOCK;
 
     for (const auto& dir : split)
@@ -186,6 +179,12 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
         if (dir.size() >= 56)
         {
             ERROR_C("filename" << dir << " to long");
+            return -1;
+        }
+
+        if (disk.read(current_block_index, block) != 0)
+        {
+            ERROR_C("Could not read block " << current_dir.first_blk);
             return -1;
         }
 
@@ -208,15 +207,60 @@ int16_t FS::navigate_to_dir_block(const std::string& path, std::string& file_nam
 
         current_block_index = result.first_blk;
         index = static_cast<int16_t>(current_block_index);
+    }
+
+    return index;
+}
+
+bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string& callee)
+{
+    const std::vector<std::string> split = split_path(path);
+
+    uint8_t block[BLOCK_SIZE];
+    uint16_t current_block_index = current_dir.first_blk;
+
+    for (int i = 0; i < split.size(); i++)
+    {
+        const auto& dir = split[i];
+        
+        if (dir.size() >= 56)
+        {
+            ERROR_C("filename" << dir << " to long");
+            return false;
+        }
 
         if (disk.read(current_block_index, block) != 0)
         {
             ERROR_C("Could not read block " << current_dir.first_blk);
-            return -1;
+            return false;
         }
+
+        if (dir == ".")
+            continue;
+
+        // we are in root block trying to go back
+        if (current_block_index == ROOT_BLOCK && dir == "..")
+            continue;
+
+        dir_entry entry{};
+        int16_t index = -1;
+        if (!find_entry(block, current_block_index, dir, entry, index, callee))
+            return false;
+
+        // we are on the last space
+        if (i == split.size() - 1)
+        {
+            out = entry;
+            return true;
+        }
+
+        // we are still traversing
+        current_block_index = entry.first_blk;
     }
 
-    return index;
+    ERROR_C("could not find the path " << path);
+
+    return false;
 }
 
 bool FS::add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const std::string& callee)
@@ -312,7 +356,7 @@ int FS::create(const std::string& filepath)
     const int block_count = (static_cast<int>(size) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     std::string file_name;
-    const int16_t dir_block = navigate_to_dir_block(filepath, file_name, "create");
+    const int16_t dir_block = walk_path(filepath, file_name, "create");
 
     if (dir_block == -1)
         return -1;
@@ -430,7 +474,7 @@ int FS::mkdir(const std::string& dirpath)
     std::cout << "FS::mkdir(" << dirpath << ")\n";
 
     std::string dir_name;
-    const int16_t block_index = navigate_to_dir_block(dirpath, dir_name, "mkdir");
+    const int16_t block_index = walk_path(dirpath, dir_name, "mkdir");
     if (block_index == -1)
         return -1;
 
@@ -481,55 +525,16 @@ int FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
 
-    // add last '/' so we make it an actual dir
-    if (dirpath.back() != '/')
-        dirpath += "/";
-
-    std::string dir_name;
-    const int16_t block_index = navigate_to_dir_block(dirpath, dir_name, "cd");
-    if (block_index == -1)
-        return -1;
-
-    uint8_t block[BLOCK_SIZE];
-    if (disk.read(block_index, block) != 0)
-    {
-        ERROR("cd", "could not read block " << block_index);
-        return -1;
-    }
-
-    dirpath.pop_back();
-    const std::vector<std::string> split = split_path(dirpath);
-    dir_name = split.back();
-
-    if (block_index == ROOT_BLOCK)
-    {
-        current_dir = {
-            .file_name = "",
-            .size = 0,
-            .first_blk = ROOT_BLOCK,
-            .type = TYPE_DIR,
-            .access_rights = READ | WRITE | EXECUTE
-        };
-
-        return 0;
-    }
+    // normalize folders
+    if (dirpath.back() == '/')
+        dirpath.pop_back();
 
     dir_entry result{};
-    int16_t index = -1;
-    if (!find_entry(block, block_index, "..", result, index, "cd"))
-        return -1;
-
-    if (disk.read(result.first_blk, block) != 0)
-    {
-        ERROR("cd", "could not read block " << block_index);
-        return -1;
-    }
-
-    if (!find_entry(block, result.first_blk, dir_name, result, index, "cd"))
+    if (!lookup_path(dirpath, result, "cd"))
         return -1;
 
     current_dir = result;
-
+    
     return 0;
 }
 
