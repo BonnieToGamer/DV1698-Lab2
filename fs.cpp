@@ -238,15 +238,27 @@ bool FS::write_fat_to_disk()
     return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat)) == 0;
 }
 
-FS::FS()
+FS::FS() : fat{}
 {
     std::cout << "FS::FS()... Creating file system\n";
+
+    if (disk.read(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat)) != 0)
+    {
+        ERROR("FS", "could not read FAT block");
+        return;
+    }
+    
+    current_dir = {
+        .file_name = "",
+        .size = 0,
+        .first_blk = ROOT_BLOCK,
+        .type = TYPE_DIR,
+        .access_rights = READ | WRITE
+    };
 }
 
 FS::~FS()
-{
-
-}
+= default;
 
 // formats the disk, i.e., creates an empty file system
 int FS::format()
