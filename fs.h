@@ -73,12 +73,13 @@ private:
      * @param path The path to navigate
      * @param file_name The resulting file name
      * @param callee The caller of the function
+     * @param print_error If an error should be printed when path isn't found
      * @return The block that has the end path. -1 if failure
      * @note This function does NOT resolve the final component; it only navigates
      * through all parent directories. Used for operations like create, remove,
      * or mkdir where the parent directory must be located.
      */
-    int16_t walk_path(const std::string& path, std::string& file_name, const std::string& callee);
+    int16_t walk_path(const std::string& path, std::string& file_name, const std::string& callee, bool print_error = true);
 
     /**
      * Resolves a path fully and returns the directory entry of the final component
@@ -87,13 +88,14 @@ private:
      * @param path The path to navigate
      * @param out The resulting dir_entry
      * @param callee The caller of the function
+     * @param print_error If an error should be printed when entry isn't found
      * @return true if success otherwise false
      * @note
      * This differs from walk_path:
      * - walk_path stops at the parent directory ("/a/b")
      * - lookup_path resolves the final component ("c") and returns its metadata
      */
-    bool lookup_path(const std::string& path, dir_entry& out, const std::string& callee);
+    bool lookup_path(const std::string& path, dir_entry& out, const std::string& callee, bool print_error = true);
 
     /**
      * Adds a vector of blocks to the fat.

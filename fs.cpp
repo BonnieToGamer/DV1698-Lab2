@@ -145,7 +145,8 @@ std::vector<std::string> split_path(const std::string& path)
     return result;
 }
 
-int16_t FS::walk_path(const std::string& path, std::string& file_name, const std::string& callee)
+int16_t FS::walk_path(const std::string& path, std::string& file_name, const std::string& callee,
+                      const bool print_error)
 {
     /*
      * Example paths:
@@ -172,6 +173,13 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
 
     std::vector<std::string> split = split_path(path);
     file_name = split.back(); // get the last split element since that's the file
+
+    if (file_name.size() >= 56)
+    {
+        ERROR_C("filename" << file_name << " to long");
+        return -1;
+    }
+    
     split.pop_back();
 
     uint8_t block[BLOCK_SIZE];
@@ -200,7 +208,7 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
             continue;
 
         dir_entry result{};
-        if (!find_entry(block, current_block_index, dir, result, index, callee))
+        if (!find_entry(block, current_block_index, dir, result, index, callee, print_error))
             return -1;
 
         if (result.type != TYPE_DIR && (result.access_rights & EXECUTE) == 0)
@@ -216,12 +224,12 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
     return index;
 }
 
-bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string& callee)
+bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string& callee, const bool print_error)
 {
     const std::vector<std::string> split = split_path(path);
 
     uint8_t block[BLOCK_SIZE];
-    uint16_t current_block_index = path.at(0) == '/' ? ROOT_BLOCK : current_dir.first_blk;;
+    uint16_t current_block_index = path.at(0) == '/' ? ROOT_BLOCK : current_dir.first_blk;
 
     for (int i = 0; i < split.size(); i++)
     {
@@ -275,7 +283,8 @@ bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string&
         current_block_index = entry.first_blk;
     }
 
-    ERROR_C("could not find the path " << path);
+    if (print_error)
+        ERROR_C("could not find the path " << path);
 
     return false;
 }
@@ -328,7 +337,8 @@ std::vector<uint16_t> FS::get_related_blocks(const uint16_t starter_block) const
     {
         result.push_back(current_block);
         current_block = fat[current_block];
-    } while (current_block != FAT_EOF);
+    }
+    while (current_block != FAT_EOF);
 
     return result;
 }
@@ -508,7 +518,7 @@ int FS::cat(const std::string& filepath)
     const auto blocks = get_related_blocks(result.first_blk);
 
     int bytes_read = 0;
-    
+
     for (const auto related_block_index : blocks)
     {
         if (disk.read(related_block_index, block) != 0)
@@ -528,7 +538,7 @@ int FS::cat(const std::string& filepath)
     }
 
     std::cout << std::endl;
-    
+
     return 0;
 }
 
@@ -573,7 +583,7 @@ int FS::ls()
     };
 
     std::cout << "name\t type\t accessrights\t size\n";
-    
+
     while (!pq.empty())
     {
         const auto entry = pq.top();
@@ -599,6 +609,117 @@ int FS::ls()
 int FS::cp(const std::string& source_path, const std::string& dest_path)
 {
     std::cout << "FS::cp(" << source_path << "," << dest_path << ")\n";
+
+    std::string source_file_name;
+    const int16_t source_parent_index = walk_path(source_path, source_file_name, "cp");
+
+    if (source_parent_index == -1)
+        return -1;
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(source_parent_index, block) != 0)
+    {
+        ERROR("cp", "could not read block " << source_parent_index);
+        return -1;
+    }
+
+    dir_entry source_entry{};
+    int16_t index;
+    if (!find_entry(block, source_parent_index, source_file_name, source_entry, index, "cp"))
+        return -1;
+
+    if (source_entry.type != TYPE_FILE)
+    {
+        ERROR("cp", "source is not a file");
+        return -1;
+    }
+
+    std::string dest_file_name;
+    int16_t dest_parent_index = walk_path(dest_path, dest_file_name, "cp", false);
+    if (dest_parent_index == -1)
+        return -1;
+
+    if (disk.read(source_parent_index, block) != 0)
+    {
+        ERROR("cp", "could not read block " << source_parent_index);
+        return -1;
+    }
+
+    dir_entry dest_entry{};
+    int16_t dest_index;
+    const bool exists = find_entry(block, dest_parent_index, dest_file_name, dest_entry, dest_index, "cp", false);
+
+    // file exits with that name, don't overwrite it
+    if (exists && dest_entry.type == TYPE_FILE)
+    {
+        ERROR("cp", "file already exists");
+        return -1;
+    }
+
+    const int amount_of_blocks = count_blocks(source_entry.first_blk);
+    const std::vector<uint16_t> empty_blocks = find_empty_blocks(amount_of_blocks, "cp");
+
+    if (empty_blocks.empty())
+        return -1;
+    
+    dir_entry new_entry = {
+        .file_name = "",
+        .size = source_entry.size,
+        .first_blk = empty_blocks.front(),
+        .type = TYPE_FILE,
+        .access_rights = source_entry.access_rights,
+    };
+    
+    // no entry exists, create file with dest_name
+    if (!exists)
+        std::strncpy(new_entry.file_name, dest_file_name.c_str(), sizeof(new_entry.file_name) - 1);
+
+    // dir exists with that name, create file with source_name in it
+    else if (dest_entry.type == TYPE_DIR)
+    {
+        std::strncpy(new_entry.file_name, source_file_name.c_str(), sizeof(new_entry.file_name) - 1);
+
+        dest_parent_index = static_cast<int16_t>(dest_entry.first_blk);
+        dest_file_name = source_file_name;
+
+        if (disk.read(dest_parent_index, block) != 0)
+        {
+            ERROR("cp", "could not read block " << source_parent_index);
+            return -1;
+        }
+
+        dir_entry existing{};
+        int16_t existing_index;
+        if (find_entry(block, dest_parent_index, source_file_name, existing, existing_index, "cp", false))
+        {
+            ERROR("cp", "file or directory with same name already in directory");
+            return -1;
+        }
+    }
+
+    if (!add_dir_entry(block, dest_parent_index, new_entry, "cp"))
+        return -1;
+
+    add_blocks_to_fat(empty_blocks, "cp");
+
+    const std::vector<uint16_t> source_blocks = get_related_blocks(source_entry.first_blk);
+        
+    // copy data
+    for (int i = 0; i < amount_of_blocks; i++)
+    {
+        if (disk.read(source_blocks[i], block) != 0)
+        {
+            ERROR("cp", "could not read block " << source_blocks[i]);
+            return -1;
+        }
+
+        if (disk.write(empty_blocks[i], block) != 0)
+        {
+            ERROR("cp", "could not write to block " << empty_blocks[i]);
+            return -1;
+        }
+    }
+
     return 0;
 }
 
