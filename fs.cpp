@@ -216,6 +216,13 @@ FS::~FS()
 int FS::format()
 {
     std::cout << "FS::format()\n";
+
+    std::memset(&fat, 0, sizeof(fat));
+    fat[ROOT_BLOCK] = FAT_EOF;
+    fat[FAT_BLOCK] = FAT_EOF;
+
+    write_fat_to_disk();
+    
     return 0;
 }
 
