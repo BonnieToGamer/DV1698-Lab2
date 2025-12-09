@@ -303,6 +303,35 @@ bool FS::write_fat_to_disk()
     return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat)) == 0;
 }
 
+int FS::count_blocks(const uint16_t starter_block) const
+{
+    auto current_block = static_cast<int16_t>(starter_block);
+    int amount = 1;
+
+    while (fat[current_block] != FAT_EOF)
+    {
+        current_block = fat[current_block];
+        amount++;
+    }
+
+    return amount;
+}
+
+std::vector<uint16_t> FS::get_related_blocks(const uint16_t starter_block) const
+{
+    auto current_block = static_cast<int16_t>(starter_block);
+    std::vector<uint16_t> result;
+
+    do
+    {
+        result.push_back(current_block);
+        current_block = fat[current_block];
+    } while (current_block != FAT_EOF);
+
+    return result;
+}
+
+
 FS::FS() : fat{}
 {
     std::cout << "FS::FS()... Creating file system\n";
@@ -441,6 +470,49 @@ int FS::create(const std::string& filepath)
 int FS::cat(const std::string& filepath)
 {
     std::cout << "FS::cat(" << filepath << ")\n";
+
+    std::string file_name;
+    const int16_t block_index = walk_path(filepath, file_name, "cat");
+
+    if (block_index == -1)
+        return -1;
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(block_index, block) != 0)
+    {
+        ERROR("cat", "could not read block " << block_index);
+        return -1;
+    }
+
+    dir_entry result{};
+    int16_t index;
+    if (!find_entry(block, block_index, file_name, result, index, "cat"))
+        return -1;
+
+    const auto blocks = get_related_blocks(result.first_blk);
+
+    int bytes_read = 0;
+    
+    for (const auto related_block_index : blocks)
+    {
+        if (disk.read(related_block_index, block) != 0)
+        {
+            ERROR("cat", "could not read block " << related_block_index);
+            return -1;
+        }
+
+        for (const auto byte : block)
+        {
+            if (bytes_read == static_cast<int>(result.size))
+                break;
+
+            std::cout << static_cast<char>(byte);
+            bytes_read++;
+        }
+    }
+
+    std::cout << std::endl;
+    
     return 0;
 }
 

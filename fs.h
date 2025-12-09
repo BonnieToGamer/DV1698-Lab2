@@ -22,7 +22,8 @@
 #define ERROR(callee, message) std::cout << "[FS::" << callee << "] Error: " << message << "\n"
 #define ERROR_C(message) std::cout << "[FS::" << callee << "] Error: " << message << "\n"
 
-struct dir_entry {
+struct dir_entry
+{
     char file_name[56]; // name of the file / sub-directory
     uint32_t size; // size of the file in bytes
     uint16_t first_blk; // index in the FAT for the first block of the file
@@ -30,14 +31,15 @@ struct dir_entry {
     uint8_t access_rights; // read (0x04), write (0x02), execute (0x01)
 };
 
-class FS {
+class FS
+{
 private:
     Disk disk;
     // size of a FAT entry is 2 bytes
-    int16_t fat[BLOCK_SIZE/2];
+    int16_t fat[BLOCK_SIZE / 2];
 
     dir_entry current_dir{};
-    
+
     /**
      * Find an amount of empty blocks
      * @param amount Amount of blocks to find
@@ -45,7 +47,7 @@ private:
      * @return The found blocks
      */
     std::vector<uint16_t> find_empty_blocks(int amount, const std::string& callee) const;
-    
+
     /**
      * Adds a new dir entry to block
      * @param block Block to add to
@@ -55,7 +57,7 @@ private:
      * @return true if success otherwise false
      */
     bool add_dir_entry(uint8_t* block, uint16_t block_index, const dir_entry& new_entry, const std::string& callee);
-    
+
     /**
      * Removes a dir entry from a block
      * @param block Block to remove from
@@ -67,26 +69,32 @@ private:
     bool remove_dir_entry(uint8_t* block, uint16_t block_index, dir_entry remove_entry, const std::string& callee);
 
     /**
-     * Takes a path and navigates to the end block and returns it
+     * Resolves a path up to its parent directory.
      * @param path The path to navigate
      * @param file_name The resulting file name
      * @param callee The caller of the function
      * @return The block that has the end path. -1 if failure
+     * @note This function does NOT resolve the final component; it only navigates
+     * through all parent directories. Used for operations like create, remove,
+     * or mkdir where the parent directory must be located.
      */
     int16_t walk_path(const std::string& path, std::string& file_name, const std::string& callee);
 
     /**
-     * Tries to walk the path to the end and returns the final dir_entry
+     * Resolves a path fully and returns the directory entry of the final component
+     * Used for operations like cd or stat where the actual directory entry
+     * of the final component is needed.
      * @param path The path to navigate
      * @param out The resulting dir_entry
      * @param callee The caller of the function
      * @return true if success otherwise false
-     * @note This is different from walk_path. walk_path goes only until
-     * it finds the directory that a file at the end should go in. This
-     * is only for directory traversing.
+     * @note
+     * This differs from walk_path:
+     * - walk_path stops at the parent directory ("/a/b")
+     * - lookup_path resolves the final component ("c") and returns its metadata
      */
     bool lookup_path(const std::string& path, dir_entry& out, const std::string& callee);
-    
+
     /**
      * Adds a vector of blocks to the fat.
      * @param blocks The blocks to add
@@ -94,13 +102,28 @@ private:
      * @return true if success otherwise false
      */
     bool add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const std::string& callee);
-    
+
     /**
      * Write's the current FAT to disk
      * @return Status, true if success otherwise false
      * @note Should be called every time fat is written to
      */
     bool write_fat_to_disk();
+
+    /**
+     * Counts how many blocks are connected to the starter block
+     * @param starter_block The block to start from
+     * @return The amount of blocks connected to the starter block
+     */
+    int count_blocks(uint16_t starter_block) const;
+
+
+    /**
+     * Gets all related blocks from FAT
+     * @param starter_block The block to start from
+     * @return The resulting connected blocks
+     */
+    std::vector<uint16_t> get_related_blocks(uint16_t starter_block) const;
 
 public:
     FS();
