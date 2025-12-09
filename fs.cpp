@@ -222,6 +222,13 @@ int FS::format()
     fat[FAT_BLOCK] = FAT_EOF;
 
     write_fat_to_disk();
+
+    uint8_t block[BLOCK_SIZE]{};
+    if (disk.write(ROOT_BLOCK, block) != 0)
+    {
+        ERROR("format", "could not write to root block");
+        return -1;
+    }
     
     return 0;
 }
