@@ -402,15 +402,29 @@ int FS::create(const std::string& filepath)
     const int block_count = (static_cast<int>(size) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     std::string file_name;
-    const int16_t dir_block = walk_path(filepath, file_name, "create");
+    const int16_t block_index = walk_path(filepath, file_name, "create");
 
-    if (dir_block == -1)
+    if (block_index == -1)
         return -1;
 
     uint8_t block[BLOCK_SIZE];
-    if (disk.read(dir_block, block) != 0)
+    if (disk.read(block_index, block) != 0)
     {
-        ERROR("create", "could not read block " << dir_block);
+        ERROR("create", "could not read block " << block_index);
+        return -1;
+    }
+
+    dir_entry result_entry{};
+    int16_t index;
+    if (find_entry(block, block_index, file_name, result_entry, index, "mkdir", false))
+    {
+        ERROR("create", "there already exists a file or directory with this name");
+        return -1;
+    }
+
+    if (disk.read(block_index, block) != 0)
+    {
+        ERROR("create", "could not read block " << block_index);
         return -1;
     }
 
@@ -432,7 +446,7 @@ int FS::create(const std::string& filepath)
 
     std::strncpy(new_entry.file_name, file_name.c_str(), sizeof(new_entry.file_name) - 1);
 
-    if (!add_dir_entry(block, dir_block, new_entry, "create"))
+    if (!add_dir_entry(block, block_index, new_entry, "create"))
         return -1;
 
     int byte_offset = 0;
