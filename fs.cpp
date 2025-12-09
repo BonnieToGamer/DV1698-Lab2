@@ -19,8 +19,8 @@ std::vector<uint16_t> FS::find_empty_blocks(const int amount, const std::string&
 
     if (blocks.size() != amount)
         ERROR_C("Could not find enough empty blocks");
-    
-    return blocks;
+
+    return {}; // return empty to indicate error
 }
 
 /**
