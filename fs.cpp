@@ -652,7 +652,7 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
     // file exits with that name, don't overwrite it
     if (exists && dest_entry.type == TYPE_FILE)
     {
-        ERROR("cp", "file already exists");
+        ERROR("cp", "file or directory with same name already exists");
         return -1;
     }
 
