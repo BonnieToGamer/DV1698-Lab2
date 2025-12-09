@@ -1,8 +1,5 @@
-#pragma once
-
 #include <iostream>
 #include <cstdint>
-#include <vector>
 #include "disk.h"
 
 #ifndef __FS_H__
@@ -12,7 +9,6 @@
 #define FAT_BLOCK 1
 #define FAT_FREE 0
 #define FAT_EOF -1
-#define FAT_ENTRIES BLOCK_SIZE/2
 
 #define TYPE_FILE 0
 #define TYPE_DIR 1
@@ -32,61 +28,7 @@ class FS {
 private:
     Disk disk;
     // size of a FAT entry is 2 bytes
-    int16_t fat[FAT_ENTRIES];
-
-    dir_entry current_dir;
-    
-    /**
-     * Writes the current fat to disk.
-     * @return Success status, 0 - success. 1 - failure
-     */
-    int write_fat_to_disk();
-
-    /**
-     * Writes the given blocks to the FAT and commits it to disk
-     * @param blocks Blocks to write to FAT
-     * @return Success status, 0 - success. 1 - failure
-     */
-    int add_blocks_to_fat(const std::vector<int16_t>& blocks);
-
-    /**
-     * Gets all related blocks from a given starting block in order from FAT
-     * @param blocks The blocks vector to add to
-     * @param starting_block The starting block to look for more blocks in the FAT
-     */
-    void get_blocks_from_fat(std::vector<int16_t>& blocks, uint16_t starting_block) const;
-
-    /**
-     * Finds `amount` of empty blocks from FAT
-     * @param blocks The blocks vector add to
-     * @param amount The amount of blocks to find
-     */
-    void find_empty_blocks(std::vector<int16_t>& blocks, int amount) const;
-
-    /**
-     * Creates a new file descriptor in an empty space of the given block
-     * @param new_entry New entry to write
-     * @param block_index The block to write to
-     * @param callee The function that called this function
-     * @return Status. 0 - success. -1 - error
-     */
-    int write_new_file_descriptor(const dir_entry& new_entry, int16_t block_index, const std::string& callee);
-    /**
-     * Finds an entry inside a directory
-     * @param dir_block The directory to navigate
-     * @param name Folder to navigate too
-     * @param result The resulting dir_entry will be placed here
-     * @return Status. 0 - success. -1 - error
-     */
-    int find_entry_in_dir(uint16_t dir_block, const std::string& name, dir_entry& result);
-
-    /**
-     * Navigates to a directory.
-     * @param path The path to navigate
-     * @param result_dir The resulting dir_entry
-     * @return Status. 0 - success. -1 -error
-     */
-    int navigate_to_dir(const std::string& path, dir_entry& result_dir);
+    int16_t fat[BLOCK_SIZE/2];
 
 public:
     FS();
@@ -95,7 +37,7 @@ public:
     int format();
     // create <filepath> creates a new file on the disk, the data content is
     // written on the following rows (ended with an empty row)
-    int create(const std::string& filepath);
+    int create(std::string filepath);
     // cat <filepath> reads the content of a file and prints it on the screen
     int cat(std::string filepath);
     // ls lists the content in the current directory (files and sub-directories)
