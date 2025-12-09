@@ -74,6 +74,23 @@ bool FS::add_dir_entry(uint8_t* block, const uint16_t block_index, const dir_ent
     return true;
 }
 
+bool FS::overwrite_dir_entry(uint8_t* block, const uint16_t block_index, const dir_entry& new_entry,
+                             const int16_t index,
+                             const std::string& callee)
+{
+    // write it there
+    std::memcpy(block + index * sizeof(dir_entry), &new_entry, sizeof(dir_entry));
+
+    // write to disk
+    if (disk.write(block_index, block) != 0)
+    {
+        ERROR_C("Could not write block" << block_index << " to disk");
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * Searches for a dir entry with the name entry_name
  * @param block Block to search
@@ -179,7 +196,7 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
         ERROR_C("filename" << file_name << " to long");
         return -1;
     }
-    
+
     split.pop_back();
 
     uint8_t block[BLOCK_SIZE];
@@ -610,18 +627,18 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
 {
     std::cout << "FS::cp(" << source_path << "," << dest_path << ")\n";
 
+    uint8_t block[BLOCK_SIZE];
+
+    // resolve source file
+
     std::string source_file_name;
     const int16_t source_parent_index = walk_path(source_path, source_file_name, "cp");
 
     if (source_parent_index == -1)
         return -1;
 
-    uint8_t block[BLOCK_SIZE];
     if (disk.read(source_parent_index, block) != 0)
-    {
-        ERROR("cp", "could not read block " << source_parent_index);
-        return -1;
-    }
+        return ERROR_R("cp", "could not read block " << source_parent_index);
 
     dir_entry source_entry{};
     int16_t index;
@@ -629,39 +646,51 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
         return -1;
 
     if (source_entry.type != TYPE_FILE)
-    {
-        ERROR("cp", "source is not a file");
-        return -1;
-    }
+        return ERROR_R("cp", "source is not a file");
+
+    // resolve destination parent + base name
 
     std::string dest_file_name;
     int16_t dest_parent_index = walk_path(dest_path, dest_file_name, "cp", false);
     if (dest_parent_index == -1)
         return -1;
 
-    if (disk.read(source_parent_index, block) != 0)
-    {
-        ERROR("cp", "could not read block " << source_parent_index);
-        return -1;
-    }
+    if (disk.read(dest_parent_index, block) != 0)
+        return ERROR_R("cp", "could not read block " << dest_parent_index);
+
+    // does destination exist?
 
     dir_entry dest_entry{};
     int16_t dest_index;
     const bool exists = find_entry(block, dest_parent_index, dest_file_name, dest_entry, dest_index, "cp", false);
 
     // file exits with that name, don't overwrite it
-    if (exists && dest_entry.type == TYPE_FILE)
+    if (exists)
     {
-        ERROR("cp", "file or directory with same name already exists");
-        return -1;
+        if (dest_entry.type == TYPE_FILE)
+            return ERROR_R("cp", "file or directory with same name already exists");
+
+        dest_parent_index = static_cast<int16_t>(dest_entry.first_blk);
+        dest_file_name = source_file_name;
+
+        if (disk.read(dest_parent_index, block) != 0)
+            return ERROR_R("cp", "could not read block " << dest_parent_index);
+
+        dir_entry existing{};
+        int16_t existing_index;
+        if (find_entry(block, dest_parent_index, source_file_name, existing, existing_index, "cp", false))
+            return ERROR_R("cp", "file or directory with same name already in directory");
     }
+
+    // allocate new blocks for the file
 
     const int amount_of_blocks = count_blocks(source_entry.first_blk);
     const std::vector<uint16_t> empty_blocks = find_empty_blocks(amount_of_blocks, "cp");
 
     if (empty_blocks.empty())
         return -1;
-    
+
+    // prepare new entry
     dir_entry new_entry = {
         .file_name = "",
         .size = source_entry.size,
@@ -669,55 +698,27 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
         .type = TYPE_FILE,
         .access_rights = source_entry.access_rights,
     };
-    
-    // no entry exists, create file with dest_name
-    if (!exists)
-        std::strncpy(new_entry.file_name, dest_file_name.c_str(), sizeof(new_entry.file_name) - 1);
 
-    // dir exists with that name, create file with source_name in it
-    else if (dest_entry.type == TYPE_DIR)
-    {
-        std::strncpy(new_entry.file_name, source_file_name.c_str(), sizeof(new_entry.file_name) - 1);
+    std::strncpy(new_entry.file_name, dest_file_name.c_str(), sizeof(new_entry.file_name) - 1);
 
-        dest_parent_index = static_cast<int16_t>(dest_entry.first_blk);
-        dest_file_name = source_file_name;
-
-        if (disk.read(dest_parent_index, block) != 0)
-        {
-            ERROR("cp", "could not read block " << source_parent_index);
-            return -1;
-        }
-
-        dir_entry existing{};
-        int16_t existing_index;
-        if (find_entry(block, dest_parent_index, source_file_name, existing, existing_index, "cp", false))
-        {
-            ERROR("cp", "file or directory with same name already in directory");
-            return -1;
-        }
-    }
-
+    // add new entry
     if (!add_dir_entry(block, dest_parent_index, new_entry, "cp"))
         return -1;
 
     add_blocks_to_fat(empty_blocks, "cp");
 
+    // copy data blocks
+    
     const std::vector<uint16_t> source_blocks = get_related_blocks(source_entry.first_blk);
-        
+
     // copy data
     for (int i = 0; i < amount_of_blocks; i++)
     {
         if (disk.read(source_blocks[i], block) != 0)
-        {
-            ERROR("cp", "could not read block " << source_blocks[i]);
-            return -1;
-        }
+            return ERROR_R("cp", "could not read block " << source_blocks[i]);
 
         if (disk.write(empty_blocks[i], block) != 0)
-        {
-            ERROR("cp", "could not write to block " << empty_blocks[i]);
-            return -1;
-        }
+            return ERROR_R("cp", "could not write to block " << empty_blocks[i]);
     }
 
     return 0;
@@ -728,6 +729,70 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
 int FS::mv(const std::string& source_path, const std::string& dest_path)
 {
     std::cout << "FS::mv(" << source_path << "," << dest_path << ")\n";
+
+    std::string source_file_name;
+    const int16_t source_parent_index = walk_path(source_path, source_file_name, "cp");
+
+    if (source_parent_index == -1)
+        return -1;
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(source_parent_index, block) != 0)
+        return ERROR_R("cp", "could not read block " << source_parent_index);
+
+    dir_entry source_entry{};
+    int16_t index;
+    if (!find_entry(block, source_parent_index, source_file_name, source_entry, index, "cp"))
+        return -1;
+
+    if ((source_entry.access_rights & READ & WRITE) != (READ & WRITE))
+        return ERROR_R("cp", "cannot read source");
+
+    std::string dest_file_name;
+    int16_t dest_parent_index = walk_path(dest_path, dest_file_name, "cp", false);
+    if (dest_parent_index == -1)
+        return -1;
+
+    if (disk.read(dest_parent_index, block) != 0)
+        return ERROR_R("mv", "could not read block " << dest_parent_index);
+
+    dir_entry dest_entry{};
+    int16_t dest_index;
+    const bool exists = find_entry(block, dest_parent_index, dest_file_name, dest_entry, dest_index, "cp", false);
+
+    // file exits with that name, don't overwrite it
+    if (exists)
+    {
+        if (dest_entry.type == TYPE_FILE)
+            return ERROR_R("mv", "file or directory with same name already exists");
+
+        // it exists but is a directory
+        // so we need to use the source file name
+        dest_parent_index = static_cast<int16_t>(dest_entry.first_blk);
+        dest_file_name = source_file_name;
+
+        if (disk.read(dest_parent_index, block) != 0)
+            return ERROR_R("mv", "could not read block " << dest_parent_index);
+
+        dir_entry existing{};
+        int16_t existing_index;
+        if (find_entry(block, dest_parent_index, source_file_name, existing, existing_index, "cp", false))
+            return ERROR_R("mv", "file or directory with same name already in directory");
+    }
+
+    std::strncpy(source_entry.file_name, dest_file_name.c_str(), sizeof(source_entry.file_name) - 1);
+
+    // add new entry
+    if (!add_dir_entry(block, dest_parent_index, source_entry, "mv"))
+        return -1;
+
+    // remove old entry
+    if (disk.read(source_parent_index, block) != 0)
+        return ERROR_R("mv", "could not read block " << source_parent_index);
+
+    if (!overwrite_dir_entry(block, source_parent_index, {}, index, "mv"))
+        return -1;
+
     return 0;
 }
 

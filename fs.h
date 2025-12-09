@@ -21,6 +21,8 @@
 
 #define ERROR(callee, message) std::cout << "[FS::" << callee << "] Error: " << message << "\n"
 #define ERROR_C(message) std::cout << "[FS::" << callee << "] Error: " << message << "\n"
+#define ERROR_R(callee, message) \
+(ERROR(callee, message), -1)
 
 struct dir_entry
 {
@@ -58,6 +60,17 @@ private:
      */
     bool add_dir_entry(uint8_t* block, uint16_t block_index, const dir_entry& new_entry, const std::string& callee);
 
+    /**
+     * Overwrites a dir_entry at index
+     * @param block Block to write to
+     * @param block_index The index of the block
+     * @param new_entry Entry to overwrite
+     * @param index The index of the entry
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     */
+    bool overwrite_dir_entry(uint8_t* block, uint16_t block_index, const dir_entry& new_entry, int16_t index, const std::string& callee);
+    
     /**
      * Removes a dir entry from a block
      * @param block Block to remove from
