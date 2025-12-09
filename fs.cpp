@@ -462,6 +462,30 @@ int FS::mkdir(std::string dirpath)
 int FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
+
+    // remove last '/' so we make it an actual dir
+    if (dirpath.back() == '/')
+        dirpath += "/";
+
+    std::string dir_name;
+    const int16_t block_index = navigate_to_dir_block(dirpath, dir_name, "mkdir");
+    if (block_index == -1)
+        return -1;
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(block_index, block) != 0)
+    {
+        ERROR("cd", "could not read block " << block_index);
+        return -1;
+    }
+
+    dir_entry result{};
+    int16_t index = -1;
+    if (!find_entry(block, block_index, dir_name, result, index, "cd"))
+        return -1;
+
+    current_dir = result;
+    
     return 0;
 }
 
