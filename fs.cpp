@@ -495,6 +495,10 @@ int FS::cd(std::string dirpath)
         return -1;
     }
 
+    dirpath.pop_back();
+    const std::vector<std::string> split = split_path(dirpath);
+    dir_name = split.back();
+
     dir_entry result{};
     int16_t index = -1;
     if (!find_entry(block, block_index, dir_name, result, index, "cd"))
