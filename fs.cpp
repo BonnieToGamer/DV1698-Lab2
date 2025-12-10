@@ -591,23 +591,6 @@ int FS::ls()
     const dir_entry* entries = reinterpret_cast<dir_entry*>(block);
     constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
 
-    // puts lexicographically smallest filename first
-    auto cmp = [](const dir_entry& a, const dir_entry& b)
-    {
-        return std::strcmp(a.file_name, b.file_name) < 0;
-    };
-
-    std::priority_queue<dir_entry, std::vector<dir_entry>, decltype(cmp)> pq(cmp);
-
-    for (int i = 0; i < size; i++)
-    {
-        const dir_entry entry = entries[i];
-        if (is_entry_empty(entry))
-            continue;
-
-        pq.push(entry);
-    }
-
     auto check_access = [](const uint8_t access_rights, const uint8_t right, const char right_str, std::string& str)
     {
         if ((access_rights & right) == right)
@@ -618,10 +601,11 @@ int FS::ls()
 
     std::cout << "name\t type\t accessrights\t size\n";
 
-    while (!pq.empty())
+    for (int i = 0; i < size; i++)
     {
-        const auto entry = pq.top();
-        pq.pop();
+        const dir_entry entry = entries[i];
+        if (is_entry_empty(entry))
+            continue;
 
         std::string access_str;
         check_access(entry.access_rights, READ, 'r', access_str);
