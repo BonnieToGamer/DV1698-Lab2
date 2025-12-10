@@ -448,6 +448,9 @@ int FS::create(const std::string& filepath)
     if (block_index == -1)
         return -1;
 
+    if (file_name == "..")
+        return ERROR_R("create", "'..' is a reserved name");
+    
     uint8_t block[BLOCK_SIZE];
     if (disk.read(block_index, block) != 0)
     {
