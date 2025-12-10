@@ -377,8 +377,6 @@ std::vector<uint16_t> FS::get_related_blocks(const uint16_t starter_block) const
 
 FS::FS() : fat{}
 {
-    std::cout << "FS::FS()... Creating file system\n";
-
     if (disk.read(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat)) != 0)
     {
         ERROR("FS", "could not read FAT block");
@@ -400,8 +398,6 @@ FS::~FS()
 // formats the disk, i.e., creates an empty file system
 int FS::format()
 {
-    std::cout << "FS::format()\n";
-
     std::memset(&fat, 0, sizeof(fat));
     fat[ROOT_BLOCK] = FAT_EOF;
     fat[FAT_BLOCK] = FAT_EOF;
@@ -422,8 +418,6 @@ int FS::format()
 // written on the following rows (ended with an empty row)
 int FS::create(const std::string& filepath)
 {
-    std::cout << "FS::create(" << filepath << ")\n";
-
     std::vector<std::string> user_input;
     while (true)
     {
@@ -529,8 +523,6 @@ int FS::create(const std::string& filepath)
 // cat <filepath> reads the content of a file and prints it on the screen
 int FS::cat(const std::string& filepath)
 {
-    std::cout << "FS::cat(" << filepath << ")\n";
-
     std::string file_name;
     const int16_t block_index = walk_path(filepath, file_name, "cat");
 
@@ -582,8 +574,6 @@ int FS::cat(const std::string& filepath)
 // ls lists the content in the currect directory (files and sub-directories)
 int FS::ls()
 {
-    std::cout << "FS::ls()\n";
-
     uint8_t block[BLOCK_SIZE];
     if (disk.read(current_dir.first_blk, block) != 0)
     {
@@ -629,8 +619,6 @@ int FS::ls()
 // <sourcepath> to a new file <destpath>
 int FS::cp(const std::string& source_path, const std::string& dest_path)
 {
-    std::cout << "FS::cp(" << source_path << "," << dest_path << ")\n";
-
     uint8_t block[BLOCK_SIZE];
 
     // resolve source file
@@ -732,8 +720,6 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
 // or moves the file <sourcepath> to the directory <destpath> (if dest is a directory)
 int FS::mv(const std::string& source_path, const std::string& dest_path)
 {
-    std::cout << "FS::mv(" << source_path << "," << dest_path << ")\n";
-
     std::string source_file_name;
     const int16_t source_parent_index = walk_path(source_path, source_file_name, "cp");
 
@@ -803,8 +789,6 @@ int FS::mv(const std::string& source_path, const std::string& dest_path)
 // rm <filepath> removes / deletes the file <filepath>
 int FS::rm(const std::string& filepath)
 {
-    std::cout << "FS::rm(" << filepath << ")\n";
-
     std::string name;
     const int16_t parent = walk_path(filepath, name, "rm");
 
@@ -841,8 +825,6 @@ int FS::rm(const std::string& filepath)
 // the end of file <filepath2>. The file <filepath1> is unchanged.
 int FS::append(const std::string& filepath1, const std::string& filepath2)
 {
-    std::cout << "FS::append(" << filepath1 << "," << filepath2 << ")\n";
-
     uint8_t block[BLOCK_SIZE];
 
     // get the first file
@@ -948,8 +930,6 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 // in the current directory
 int FS::mkdir(const std::string& dirpath)
 {
-    std::cout << "FS::mkdir(" << dirpath << ")\n";
-
     std::string dir_name;
     const int16_t block_index = walk_path(dirpath, dir_name, "mkdir");
     if (block_index == -1)
@@ -1018,8 +998,6 @@ int FS::mkdir(const std::string& dirpath)
 // cd <dirpath> changes the current (working) directory to the directory named <dirpath>
 int FS::cd(std::string dirpath)
 {
-    std::cout << "FS::cd(" << dirpath << ")\n";
-
     // normalize folders
     if (dirpath.back() == '/')
         dirpath.pop_back();
@@ -1040,8 +1018,6 @@ int FS::cd(std::string dirpath)
 // directory, including the currect directory name
 int FS::pwd()
 {
-    std::cout << "FS::pwd()\n";
-
     uint16_t current_block = current_dir.first_blk;
     std::string path;
 
@@ -1097,8 +1073,6 @@ int FS::pwd()
 // file <filepath> to <accessrights>.
 int FS::chmod(const std::string& access_rights, const std::string& filepath)
 {
-    std::cout << "FS::chmod(" << access_rights << "," << filepath << ")\n";
-
     int value;
 
     try
