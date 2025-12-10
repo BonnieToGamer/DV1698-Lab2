@@ -450,7 +450,7 @@ int FS::create(const std::string& filepath)
 
     if (file_name == "..")
         return ERROR_R("create", "'..' is a reserved name");
-    
+
     uint8_t block[BLOCK_SIZE];
     if (disk.read(block_index, block) != 0)
     {
@@ -725,7 +725,7 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
     add_blocks_to_fat(empty_blocks, "cp");
 
     // copy data blocks
-    
+
     const std::vector<uint16_t> source_blocks = get_related_blocks(source_entry.first_blk);
 
     // copy data
@@ -843,10 +843,10 @@ int FS::rm(const std::string& filepath)
 
     if (blocks.empty())
         return -1;
-    
+
     if (!remove_blocks_from_fat(blocks, "rm"))
         return -1;
-    
+
     return 0;
 }
 
@@ -859,7 +859,7 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
     uint8_t block[BLOCK_SIZE];
 
     // get the first file
-    
+
     std::string file_name_1;
     const int16_t parent_1 = walk_path(filepath1, file_name_1, "append");
 
@@ -910,7 +910,7 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 
         if (new_blocks.empty())
             return -1;
-    
+
         file_2_blocks.insert(file_2_blocks.end(), new_blocks.begin(), new_blocks.end());
     }
 
@@ -920,12 +920,12 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
     file_entry_2.size = final_size;
     if (!overwrite_dir_entry(block, parent_2, file_entry_2, file_index_2, "append"))
         return -1;
-    
+
     uint8_t write_block[BLOCK_SIZE];
 
     if (disk.read(file_2_blocks[current_block_index], write_block) != 0)
         return ERROR_R("append", "could not read block " << file_2_blocks[current_block_index]);
-    
+
     for (const auto read_block : file_1_blocks)
     {
         if (disk.read(read_block, block) != 0)
@@ -934,12 +934,12 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
         for (const auto byte : block)
         {
             write_block[current_write_byte_offset++] = byte;
-            
+
             if (current_write_byte_offset == BLOCK_SIZE)
             {
                 if (disk.write(file_2_blocks[current_block_index], write_block) != 0)
                     return ERROR_R("append", "could not write block " << file_2_blocks[current_block_index]);
-                
+
                 current_write_byte_offset = 0;
                 current_block_index++;
 
@@ -953,7 +953,7 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
     }
 
     add_blocks_to_fat(file_2_blocks, "append");
-    
+
     return 0;
 }
 
@@ -1032,7 +1032,7 @@ int FS::mkdir(const std::string& dirpath)
 int FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
-    
+
     // normalize folders
     if (dirpath.back() == '/')
         dirpath.pop_back();
@@ -1059,7 +1059,7 @@ int FS::pwd()
     std::string path;
 
     uint8_t block[BLOCK_SIZE];
-    
+
     while (current_block != ROOT_BLOCK)
     {
         if (disk.read(current_block, block) != 0)
@@ -1109,5 +1109,44 @@ int FS::pwd()
 int FS::chmod(const std::string& access_rights, const std::string& filepath)
 {
     std::cout << "FS::chmod(" << access_rights << "," << filepath << ")\n";
+
+    int value;
+
+    try
+    {
+        value = std::stoi(access_rights);
+    }
+    catch (const std::invalid_argument&)
+    {
+        return ERROR_R("chmod", "the access rights is not a number");
+    }
+    catch (const std::out_of_range&)
+    {
+        return ERROR_R("chmod", "the access rights are too big");
+    }
+
+    if (value > (READ | WRITE | EXECUTE))
+        return ERROR_R("chmod", "the access rights are too big");
+
+    std::string name;
+    const int16_t parent = walk_path(filepath, name, "chmod");
+
+    if (parent == -1)
+        return -1;
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(parent, block) != 0)
+        return ERROR_R("chmod", "could not read block " << parent);
+
+    dir_entry entry{};
+    int16_t index;
+    if (!find_entry(block, parent, name, entry, index, "chmod"))
+        return -1;
+
+    entry.access_rights = value;
+
+    if (!overwrite_dir_entry(block, parent, entry, index, "chmod"))
+        return -1;
+
     return 0;
 }
