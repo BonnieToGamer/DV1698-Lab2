@@ -1032,8 +1032,6 @@ int FS::mkdir(const std::string& dirpath)
 int FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
-
-    // BUG: can go into files (again)
     
     // normalize folders
     if (dirpath.back() == '/')
@@ -1042,6 +1040,9 @@ int FS::cd(std::string dirpath)
     dir_entry result{};
     if (!lookup_path(dirpath, result, "cd"))
         return -1;
+
+    if (result.type == TYPE_FILE)
+        return ERROR_R("cd", "cannot cd into a file");
 
     current_dir = result;
 
