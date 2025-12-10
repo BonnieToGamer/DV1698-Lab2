@@ -1033,6 +1033,8 @@ int FS::cd(std::string dirpath)
 {
     std::cout << "FS::cd(" << dirpath << ")\n";
 
+    // BUG: can go into files (again)
+    
     // normalize folders
     if (dirpath.back() == '/')
         dirpath.pop_back();
@@ -1051,6 +1053,53 @@ int FS::cd(std::string dirpath)
 int FS::pwd()
 {
     std::cout << "FS::pwd()\n";
+
+    uint16_t current_block = current_dir.first_blk;
+    std::string path;
+
+    uint8_t block[BLOCK_SIZE];
+    
+    while (current_block != ROOT_BLOCK)
+    {
+        if (disk.read(current_block, block) != 0)
+            return ERROR_R("pwd", "could not read block " << current_block);
+
+        dir_entry parent_entry{};
+        int16_t index;
+        if (!find_entry(block, current_block, "..", parent_entry, index, "pwd", false))
+            break; // probably on root block
+
+        uint16_t parent_block = parent_entry.first_blk;
+
+        if (disk.read(parent_block, block) != 0)
+            return ERROR_R("pwd", "could not read block " << parent_block);
+
+        dir_entry name_entry{};
+        bool found_name = false;
+
+        for (int i = 0; i < BLOCK_SIZE / sizeof(dir_entry); i++)
+        {
+            const dir_entry* entry = reinterpret_cast<dir_entry*>(block) + i;
+            if (entry->first_blk == current_block && !is_entry_empty(*entry))
+            {
+                name_entry = *entry;
+                found_name = true;
+                break;
+            }
+        }
+
+        if (!found_name)
+            return ERROR_R("pwd", "could not find directory name in parent");
+
+        path.insert(0, std::string(name_entry.file_name) + "/");
+
+        current_block = parent_block;
+    }
+
+    path.insert(0, "/");
+
+    std::cout << path << std::endl;
+
     return 0;
 }
 
