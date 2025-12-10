@@ -457,7 +457,7 @@ int FS::create(const std::string& filepath)
 
     dir_entry result_entry{};
     int16_t index;
-    if (find_entry(block, block_index, file_name, result_entry, index, "mkdir", false))
+    if (find_entry(block, block_index, file_name, result_entry, index, "create", false))
     {
         ERROR("create", "there already exists a file or directory with this name");
         return -1;
