@@ -814,6 +814,36 @@ int FS::mv(const std::string& source_path, const std::string& dest_path)
 int FS::rm(const std::string& filepath)
 {
     std::cout << "FS::rm(" << filepath << ")\n";
+
+    std::string name;
+    const int16_t parent = walk_path(filepath, name, "rm");
+
+    if (parent == -1)
+        return -1;
+
+    uint8_t block[BLOCK_SIZE];
+    if (disk.read(parent, block) != 0)
+        return ERROR_R("rm", "could not read block " << parent);
+
+    dir_entry entry{};
+    int16_t index;
+    if (!find_entry(block, parent, name, entry, index, "rm"))
+        return -1;
+
+    if ((entry.access_rights & WRITE) != WRITE)
+        return ERROR_R("rm", "no permission to delete");
+
+    constexpr dir_entry empty{};
+    overwrite_dir_entry(block, parent, empty, index, "rm");
+
+    const std::vector<uint16_t> blocks = get_related_blocks(entry.first_blk);
+
+    if (blocks.empty())
+        return -1;
+    
+    if (!remove_blocks_from_fat(blocks, "rm"))
+        return -1;
+    
     return 0;
 }
 
