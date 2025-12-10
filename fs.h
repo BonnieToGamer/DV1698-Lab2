@@ -119,6 +119,14 @@ private:
     bool add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const std::string& callee);
 
     /**
+     * Removes a vector of blocks from the fat.
+     * @param blocks The blocks to remove
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     */
+    bool remove_blocks_from_fat(const std::vector<unsigned short int>& blocks, const std::string& callee);
+
+    /**
      * Write's the current FAT to disk
      * @return Status, true if success otherwise false
      * @note Should be called every time fat is written to

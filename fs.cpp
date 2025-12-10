@@ -326,6 +326,20 @@ bool FS::add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const 
     return true;
 }
 
+bool FS::remove_blocks_from_fat(const std::vector<unsigned short int>& blocks, const std::string& callee)
+{
+    for (const unsigned short block : blocks)
+        fat[block] = FAT_FREE;
+
+    if (!write_fat_to_disk())
+    {
+        ERROR_C("could not write fat to disk");
+        return false;
+    }
+
+    return true;
+}
+
 bool FS::write_fat_to_disk()
 {
     return disk.write(FAT_BLOCK, reinterpret_cast<uint8_t*>(fat)) == 0;
@@ -808,10 +822,109 @@ int FS::rm(const std::string& filepath)
 int FS::append(const std::string& filepath1, const std::string& filepath2)
 {
     std::cout << "FS::append(" << filepath1 << "," << filepath2 << ")\n";
+
+    uint8_t block[BLOCK_SIZE];
+
+    // get the first file
+    
+    std::string file_name_1;
+    const int16_t parent_1 = walk_path(filepath1, file_name_1, "append");
+
+    if (parent_1 == -1)
+        return -1;
+
+    if (disk.read(parent_1, block) != 0)
+        return ERROR_R("append", "could not read block " << parent_1);
+
+    // check that it exists
+    dir_entry file_entry_1{};
+    int16_t file_index_1;
+    if (!find_entry(block, parent_1, file_name_1, file_entry_1, file_index_1, "append"))
+        return -1;
+
+    // check it's a file
+    if (file_entry_1.type != TYPE_FILE)
+        return ERROR_R("append", file_name_1 << " is not a file");
+
+    // get the second file
+    std::string file_name_2;
+    const int16_t parent_2 = walk_path(filepath2, file_name_2, "append");
+
+    if (parent_2 == -1)
+        return -1;
+
+    if (disk.read(parent_2, block) != 0)
+        return ERROR_R("append", "could not read block " << parent_2);
+
+    dir_entry file_entry_2{};
+    int16_t file_index_2;
+    if (!find_entry(block, parent_2, file_name_2, file_entry_2, file_index_2, "append"))
+        return -1;
+
+    if (file_entry_2.type != TYPE_FILE)
+        return ERROR_R("append", file_name_2 << " is not a file");
+
+    const std::vector<uint16_t> file_1_blocks = get_related_blocks(file_entry_1.first_blk);
+    std::vector<uint16_t> file_2_blocks = get_related_blocks(file_entry_2.first_blk);
+
+    const int final_size = static_cast<int>(file_entry_1.size + file_entry_2.size);
+    const int final_block_size = (final_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    const int new_blocks_size = final_block_size - static_cast<int>(file_2_blocks.size());
+
+    if (new_blocks_size > 0)
+    {
+        const std::vector<uint16_t> new_blocks = find_empty_blocks(new_blocks_size, "append");
+
+        if (new_blocks.empty())
+            return -1;
+    
+        file_2_blocks.insert(file_2_blocks.end(), new_blocks.begin(), new_blocks.end());
+    }
+
+    int current_block_index = static_cast<int>(file_entry_2.size) / BLOCK_SIZE;
+    int current_write_byte_offset = static_cast<int>(file_entry_2.size) % BLOCK_SIZE;
+
+    file_entry_2.size = final_size;
+    if (!overwrite_dir_entry(block, parent_2, file_entry_2, file_index_2, "append"))
+        return -1;
+    
+    uint8_t write_block[BLOCK_SIZE];
+
+    if (disk.read(file_2_blocks[current_block_index], write_block) != 0)
+        return ERROR_R("append", "could not read block " << file_2_blocks[current_block_index]);
+    
+    for (const auto read_block : file_1_blocks)
+    {
+        if (disk.read(read_block, block) != 0)
+            return ERROR_R("append", "could not read block " << read_block);
+
+        for (const auto byte : block)
+        {
+            write_block[current_write_byte_offset++] = byte;
+            
+            if (current_write_byte_offset == BLOCK_SIZE)
+            {
+                if (disk.write(file_2_blocks[current_block_index], write_block) != 0)
+                    return ERROR_R("append", "could not write block " << file_2_blocks[current_block_index]);
+                
+                current_write_byte_offset = 0;
+                current_block_index++;
+
+                if (current_block_index > file_2_blocks.size() - 1)
+                    break;
+
+                if (disk.read(file_2_blocks[current_block_index], write_block) != 0)
+                    return ERROR_R("append", "could not read block " << file_2_blocks[current_block_index]);
+            }
+        }
+    }
+
+    add_blocks_to_fat(file_2_blocks, "append");
+    
     return 0;
 }
 
-// mkdir <dirpath> creates a new sub-directory with the name <dirpath>
+// mkdir <dirpath> creates a new subdirectory with the name <dirpath>
 // in the current directory
 int FS::mkdir(const std::string& dirpath)
 {
