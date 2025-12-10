@@ -181,7 +181,7 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
         file_name = path;
         if (file_name.size() >= 56)
         {
-            ERROR_C("filename" << file_name << " to long");
+            ERROR_C("filename " << file_name << " to long");
             return -1;
         }
 
@@ -448,7 +448,7 @@ int FS::create(const std::string& filepath)
     if (block_index == -1)
         return -1;
 
-    if (file_name == "..")
+    if (file_name == ".." || file_name == ".")
         return ERROR_R("create", "'..' is a reserved name");
 
     uint8_t block[BLOCK_SIZE];
@@ -549,6 +549,9 @@ int FS::cat(const std::string& filepath)
     if (!find_entry(block, block_index, file_name, result, index, "cat"))
         return -1;
 
+    if (result.type == TYPE_DIR)
+        return ERROR_R("cat", "cannot cat a directory");
+
     const auto blocks = get_related_blocks(result.first_blk);
 
     int bytes_read = 0;
@@ -604,7 +607,7 @@ int FS::ls()
     for (int i = 0; i < size; i++)
     {
         const dir_entry entry = entries[i];
-        if (is_entry_empty(entry))
+        if (is_entry_empty(entry) || std::string(entry.file_name) == "..")
             continue;
 
         std::string access_str;
@@ -1081,6 +1084,8 @@ int FS::pwd()
         current_block = parent_block;
     }
 
+    if (!path.empty())
+        path.pop_back();
     path.insert(0, "/");
 
     std::cout << path << std::endl;
