@@ -205,6 +205,9 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
 
     for (const auto& dir : split)
     {
+        if (dir.empty())
+            continue;
+        
         if (dir.size() >= 56)
         {
             ERROR_C("filename" << dir << " to long");
