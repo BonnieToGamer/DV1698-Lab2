@@ -547,6 +547,9 @@ int FS::cat(const std::string& filepath)
     if (result.type == TYPE_DIR)
         return ERROR_R("cat", "cannot cat a directory");
 
+    if ((result.access_rights & READ) != READ)
+        return ERROR_R("cat", "no permission to read the file");
+
     const auto blocks = get_related_blocks(result.first_blk);
 
     int bytes_read = 0;
@@ -851,6 +854,9 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
     if (file_entry_1.type != TYPE_FILE)
         return ERROR_R("append", file_name_1 << " is not a file");
 
+    if ((file_entry_1.access_rights & READ) != READ)
+        return ERROR_R("append", "no permission to read " << file_name_1);
+
     // get the second file
     std::string file_name_2;
     const int16_t parent_2 = walk_path(filepath2, file_name_2, "append");
@@ -868,6 +874,10 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 
     if (file_entry_2.type != TYPE_FILE)
         return ERROR_R("append", file_name_2 << " is not a file");
+
+    if ((file_entry_2.access_rights & WRITE) != WRITE)
+        return ERROR_R("append", "no permission to write " << file_name_2);
+
 
     const std::vector<uint16_t> file_1_blocks = get_related_blocks(file_entry_1.first_blk);
     std::vector<uint16_t> file_2_blocks = get_related_blocks(file_entry_2.first_blk);
