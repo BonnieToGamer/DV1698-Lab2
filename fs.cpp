@@ -309,6 +309,43 @@ bool FS::lookup_path(const std::string& path, dir_entry& out, const std::string&
     return false;
 }
 
+bool FS::resolve_file(uint8_t* block, const std::string& path, dir_entry& out_entry, int16_t& out_index, int16_t& out_parent,
+    const uint8_t required_permissions, const std::string& callee)
+{
+    // walk to parent
+    std::string name;
+    out_parent = walk_path(path, name, callee);
+    if (out_parent < 0)
+        return false;
+
+    // read parent block
+    if (disk.read(out_parent, block) != 0)
+    {
+        ERROR_C("could not read block " << out_parent);
+        return false;
+    }
+
+    // find the entry
+    if (!find_entry(block, out_parent, name, out_entry, out_index, callee))
+        return false;
+
+    // ensure it's a file
+    if (out_entry.type != TYPE_FILE)
+    {
+        ERROR_C(name << " is not a file");
+        return false;
+    }
+
+    // check permissions
+    if ((out_entry.access_rights & required_permissions) != required_permissions)
+    {
+        ERROR_C("no permission for " << path);
+        return false;
+    }
+
+    return true;
+}
+
 bool FS::add_blocks_to_fat(const std::vector<unsigned short int>& blocks, const std::string& callee)
 {
     for (int i = 0; i < blocks.size(); i++)
@@ -526,29 +563,12 @@ int FS::create(const std::string& filepath)
 // cat <filepath> reads the content of a file and prints it on the screen
 int FS::cat(const std::string& filepath)
 {
-    std::string file_name;
-    const int16_t block_index = walk_path(filepath, file_name, "cat");
-
-    if (block_index == -1)
-        return -1;
-
     uint8_t block[BLOCK_SIZE];
-    if (disk.read(block_index, block) != 0)
-    {
-        ERROR("cat", "could not read block " << block_index);
-        return -1;
-    }
-
+    int16_t block_index, index;
     dir_entry result{};
-    int16_t index;
-    if (!find_entry(block, block_index, file_name, result, index, "cat"))
+    
+    if (!resolve_file(block, filepath, result, index, block_index, READ, "cat"))
         return -1;
-
-    if (result.type == TYPE_DIR)
-        return ERROR_R("cat", "cannot cat a directory");
-
-    if ((result.access_rights & READ) != READ)
-        return ERROR_R("cat", "no permission to read the file");
 
     const auto blocks = get_related_blocks(result.first_blk);
 
@@ -626,25 +646,14 @@ int FS::ls()
 int FS::cp(const std::string& source_path, const std::string& dest_path)
 {
     uint8_t block[BLOCK_SIZE];
+    int16_t source_parent_index, index;
+    dir_entry source_entry{};
 
     // resolve source file
-
-    std::string source_file_name;
-    const int16_t source_parent_index = walk_path(source_path, source_file_name, "cp");
-
-    if (source_parent_index == -1)
+    if (!resolve_file(block, source_path, source_entry, index, source_parent_index, 0, "cp"))
         return -1;
 
-    if (disk.read(source_parent_index, block) != 0)
-        return ERROR_R("cp", "could not read block " << source_parent_index);
-
-    dir_entry source_entry{};
-    int16_t index;
-    if (!find_entry(block, source_parent_index, source_file_name, source_entry, index, "cp"))
-        return -1;
-
-    if (source_entry.type != TYPE_FILE)
-        return ERROR_R("cp", "source is not a file");
+    const std::string source_file_name = source_entry.file_name;
 
     // resolve destination parent + base name
 
@@ -726,23 +735,13 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
 // or moves the file <sourcepath> to the directory <destpath> (if dest is a directory)
 int FS::mv(const std::string& source_path, const std::string& dest_path)
 {
-    std::string source_file_name;
-    const int16_t source_parent_index = walk_path(source_path, source_file_name, "cp");
-
-    if (source_parent_index == -1)
-        return -1;
-
     uint8_t block[BLOCK_SIZE];
-    if (disk.read(source_parent_index, block) != 0)
-        return ERROR_R("cp", "could not read block " << source_parent_index);
-
     dir_entry source_entry{};
-    int16_t index;
-    if (!find_entry(block, source_parent_index, source_file_name, source_entry, index, "cp"))
+    int16_t source_parent_index, index;
+    if (!resolve_file(block, source_path, source_entry, index, source_parent_index, READ | WRITE, "mv"))
         return -1;
 
-    if ((source_entry.access_rights & READ & WRITE) != (READ & WRITE))
-        return ERROR_R("cp", "cannot read source");
+    const std::string source_file_name = source_entry.file_name;
 
     std::string dest_file_name;
     int16_t dest_parent_index = walk_path(dest_path, dest_file_name, "cp", false);
@@ -772,7 +771,7 @@ int FS::mv(const std::string& source_path, const std::string& dest_path)
 
         dir_entry existing{};
         int16_t existing_index;
-        if (find_entry(block, dest_parent_index, source_file_name, existing, existing_index, "cp", false))
+        if (find_entry(block, dest_parent_index, source_file_name, existing, existing_index, "mv", false))
             return ERROR_R("mv", "file or directory with same name already in directory");
     }
 
@@ -795,24 +794,14 @@ int FS::mv(const std::string& source_path, const std::string& dest_path)
 // rm <filepath> removes / deletes the file <filepath>
 int FS::rm(const std::string& filepath)
 {
-    std::string name;
-    const int16_t parent = walk_path(filepath, name, "rm");
-
-    if (parent == -1)
-        return -1;
-
     uint8_t block[BLOCK_SIZE];
-    if (disk.read(parent, block) != 0)
-        return ERROR_R("rm", "could not read block " << parent);
-
+    int16_t parent, index;
     dir_entry entry{};
-    int16_t index;
-    if (!find_entry(block, parent, name, entry, index, "rm"))
+    std::string name;
+    
+    if (!resolve_file(block, filepath, entry, index, parent, WRITE, "rm"))
         return -1;
-
-    if ((entry.access_rights & WRITE) != WRITE)
-        return ERROR_R("rm", "no permission to delete");
-
+    
     constexpr dir_entry empty{};
     overwrite_dir_entry(block, parent, empty, index, "rm");
 
@@ -835,49 +824,14 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 
     // get the first file
 
-    std::string file_name_1;
-    const int16_t parent_1 = walk_path(filepath1, file_name_1, "append");
+    dir_entry file_entry_1{}, file_entry_2{};
+    int16_t file_index_1, file_index_2, parent_1, parent_2;
 
-    if (parent_1 == -1)
+    if (!resolve_file(block, filepath1, file_entry_1, file_index_1, parent_1, READ, "append"))
         return -1;
 
-    if (disk.read(parent_1, block) != 0)
-        return ERROR_R("append", "could not read block " << parent_1);
-
-    // check that it exists
-    dir_entry file_entry_1{};
-    int16_t file_index_1;
-    if (!find_entry(block, parent_1, file_name_1, file_entry_1, file_index_1, "append"))
+    if (!resolve_file(block, filepath2, file_entry_2, file_index_2, parent_2, WRITE, "append"))
         return -1;
-
-    // check it's a file
-    if (file_entry_1.type != TYPE_FILE)
-        return ERROR_R("append", file_name_1 << " is not a file");
-
-    if ((file_entry_1.access_rights & READ) != READ)
-        return ERROR_R("append", "no permission to read " << file_name_1);
-
-    // get the second file
-    std::string file_name_2;
-    const int16_t parent_2 = walk_path(filepath2, file_name_2, "append");
-
-    if (parent_2 == -1)
-        return -1;
-
-    if (disk.read(parent_2, block) != 0)
-        return ERROR_R("append", "could not read block " << parent_2);
-
-    dir_entry file_entry_2{};
-    int16_t file_index_2;
-    if (!find_entry(block, parent_2, file_name_2, file_entry_2, file_index_2, "append"))
-        return -1;
-
-    if (file_entry_2.type != TYPE_FILE)
-        return ERROR_R("append", file_name_2 << " is not a file");
-
-    if ((file_entry_2.access_rights & WRITE) != WRITE)
-        return ERROR_R("append", "no permission to write " << file_name_2);
-
 
     const std::vector<uint16_t> file_1_blocks = get_related_blocks(file_entry_1.first_blk);
     std::vector<uint16_t> file_2_blocks = get_related_blocks(file_entry_2.first_blk);
@@ -1104,19 +1058,11 @@ int FS::chmod(const std::string& access_rights, const std::string& filepath)
     if (value > (READ | WRITE | EXECUTE))
         return ERROR_R("chmod", "the access rights are too big");
 
-    std::string name;
-    const int16_t parent = walk_path(filepath, name, "chmod");
-
-    if (parent == -1)
-        return -1;
-
     uint8_t block[BLOCK_SIZE];
-    if (disk.read(parent, block) != 0)
-        return ERROR_R("chmod", "could not read block " << parent);
-
+    int16_t index, parent;
     dir_entry entry{};
-    int16_t index;
-    if (!find_entry(block, parent, name, entry, index, "chmod"))
+    std::string name;
+    if (!resolve_file(block, filepath, entry, index, parent, 0, "chmod"))
         return -1;
 
     entry.access_rights = value;

@@ -111,6 +111,19 @@ private:
     bool lookup_path(const std::string& path, dir_entry& out, const std::string& callee, bool print_error = true);
 
     /**
+     * Resolves a file for a given path
+     * @param block The block to start reading from
+     * @param path The path to navigate
+     * @param out_entry The resulting dir_entry
+     * @param out_index The resulting index of that dir_entry
+     * @param out_parent The block the dir_entry is located in
+     * @param required_permissions The permissions needed for the entry
+     * @param callee The caller of the function
+     * @return true if success otherwise false
+     */
+    bool resolve_file(uint8_t* block, const std::string& path, dir_entry& out_entry, int16_t& out_index, int16_t& out_parent, uint8_t required_permissions, const std::string& callee);
+
+    /**
      * Adds a vector of blocks to the fat.
      * @param blocks The blocks to add
      * @param callee The caller of the function
