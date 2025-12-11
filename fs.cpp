@@ -795,12 +795,40 @@ int FS::mv(const std::string& source_path, const std::string& dest_path)
 int FS::rm(const std::string& filepath)
 {
     uint8_t block[BLOCK_SIZE];
-    int16_t parent, index;
+    int16_t index;
     dir_entry entry{};
     std::string name;
     
-    if (!resolve_file(block, filepath, entry, index, parent, WRITE, "rm"))
+    const int16_t parent = walk_path(filepath, name, "rm");
+    if (parent < 0)
+        return false;
+
+    // read parent block
+    if (disk.read(parent, block) != 0)
+        return ERROR_R("rm", "could not read block " << parent);
+
+    // find the entry
+    if (!find_entry(block, parent, name, entry, index, "rm"))
         return -1;
+
+    if ((entry.access_rights & WRITE) != WRITE)
+        return ERROR_R("rm", "no permission to delete " << name);
+
+    if (entry.type == TYPE_DIR)
+    {
+        uint8_t dir_block[BLOCK_SIZE];
+        if (disk.read(entry.first_blk, dir_block) != 0)
+            return ERROR_R("rm", "could not read block " << parent);
+
+        const auto* entries = reinterpret_cast<const dir_entry*>(dir_block);
+        constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
+
+        for (int i = 0; i < size; i++)
+        {
+            if (!is_entry_empty(entries[i]))
+                return ERROR_R("rm", "directory " << name <<  " is not empty");
+        }
+    }
     
     constexpr dir_entry empty{};
     overwrite_dir_entry(block, parent, empty, index, "rm");
