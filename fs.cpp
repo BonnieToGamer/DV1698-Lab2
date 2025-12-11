@@ -197,7 +197,8 @@ int16_t FS::walk_path(const std::string& path, std::string& file_name, const std
         return -1;
     }
 
-    split.pop_back();
+    if (!split.empty())
+        split.pop_back();
 
     uint8_t block[BLOCK_SIZE];
     uint16_t current_block_index = path.at(0) == '/' ? ROOT_BLOCK : current_dir.first_blk;
