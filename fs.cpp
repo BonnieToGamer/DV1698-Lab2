@@ -593,7 +593,7 @@ int FS::cat(const std::string& filepath)
         }
     }
 
-    std::cout << std::endl;
+    std::cout << std::flush;
 
     return 0;
 }
