@@ -925,12 +925,14 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 // mkdir <dirpath> creates a new subdirectory with the name <dirpath>
 // in the current directory
 int FS::mkdir(const std::string& dirpath)
-{
+{   
+    // find the parent directory block and get the directory name.
     std::string dir_name;
     const int16_t block_index = walk_path(dirpath, dir_name, "mkdir");
     if (block_index == -1)
         return -1;
 
+        // read the parent directory block
     uint8_t block[BLOCK_SIZE];
     if (disk.read(block_index, block) != 0)
     {
@@ -938,6 +940,7 @@ int FS::mkdir(const std::string& dirpath)
         return -1;
     }
 
+    // check if there is an entry that already has the same name.
     dir_entry result_entry{};
     int16_t index;
     if (find_entry(block, block_index, dir_name, result_entry, index, "mkdir", false))
@@ -945,13 +948,13 @@ int FS::mkdir(const std::string& dirpath)
         ERROR("mkdir", "there already exists a file or directory with this name");
         return -1;
     }
-
+    // find a free block 
     const std::vector<uint16_t> result = find_empty_blocks(1, "mkdir");
     if (result.empty())
         return -1;
-
+    // add blocks to fat
     add_blocks_to_fat(result, "mkdir");
-
+    // create the new directory entry
     dir_entry new_entry = {
         .file_name = "",
         .size = 0,
@@ -959,24 +962,27 @@ int FS::mkdir(const std::string& dirpath)
         .type = TYPE_DIR,
         .access_rights = READ | WRITE | EXECUTE
     };
-
+    // copy the directory name into the entry
     std::strncpy(new_entry.file_name, dir_name.c_str(), sizeof(new_entry.file_name) - 1);
 
+    // read the parent directory block 
     if (disk.read(block_index, block) != 0)
     {
         ERROR("mkdir", "could not read block " << block_index);
         return -1;
     }
 
+    // insert the new directory entry into the parent dir block
     if (!add_dir_entry(block, block_index, new_entry, "mkdir"))
         return -1;
 
+    // clear the allocated directory block 
     std::memset(block, 0, sizeof(block));
 
     // get permissions of parent
     if (!lookup_path("..", result_entry, "mkdir"))
         return -1;
-
+    // create the ".." entry for the new directory
     const dir_entry parent_entry = {
         .file_name = "..",
         .size = 0,
@@ -984,7 +990,7 @@ int FS::mkdir(const std::string& dirpath)
         .type = TYPE_DIR,
         .access_rights = result_entry.access_rights
     };
-
+    // add the ".." into the new directory block
     if (!add_dir_entry(block, result[0], parent_entry, "mkdir"))
         return -1;
 
