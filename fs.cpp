@@ -851,24 +851,26 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 {
     uint8_t block[BLOCK_SIZE];
 
-    // get the first file
 
     dir_entry file_entry_1{}, file_entry_2{};
     int16_t file_index_1, file_index_2, parent_1, parent_2;
-
+    // resolve the first file
     if (!resolve_file(block, filepath1, file_entry_1, file_index_1, parent_1, READ, "append"))
         return -1;
-
+    // resolve the second file
     if (!resolve_file(block, filepath2, file_entry_2, file_index_2, parent_2, WRITE, "append"))
         return -1;
 
+    // get the both files related blocks
     const std::vector<uint16_t> file_1_blocks = get_related_blocks(file_entry_1.first_blk);
     std::vector<uint16_t> file_2_blocks = get_related_blocks(file_entry_2.first_blk);
 
+    // calculate final size, final block size and the new required block size
     const int final_size = static_cast<int>(file_entry_1.size + file_entry_2.size);
     const int final_block_size = (final_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
     const int new_blocks_size = final_block_size - static_cast<int>(file_2_blocks.size());
 
+    // if more blocks are needed, allocate new blocks
     if (new_blocks_size > 0)
     {
         const std::vector<uint16_t> new_blocks = find_empty_blocks(new_blocks_size, "append");
@@ -878,28 +880,32 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
 
         file_2_blocks.insert(file_2_blocks.end(), new_blocks.begin(), new_blocks.end());
     }
-
+    // Find what blocks to start writing into
     int current_block_index = static_cast<int>(file_entry_2.size) / BLOCK_SIZE;
     int current_write_byte_offset = static_cast<int>(file_entry_2.size) % BLOCK_SIZE;
-
+    // Update the destination file size in the directory entry
     file_entry_2.size = final_size;
     if (!overwrite_dir_entry(block, parent_2, file_entry_2, file_index_2, "append"))
         return -1;
 
     uint8_t write_block[BLOCK_SIZE];
-
+    // Load the blocks to start writing to
     if (disk.read(file_2_blocks[current_block_index], write_block) != 0)
         return ERROR_R("append", "could not read block " << file_2_blocks[current_block_index]);
 
+    // iterate through all the blocks in the source file
+    
     for (const auto read_block : file_1_blocks)
     {
+        // read one block from source file
         if (disk.read(read_block, block) != 0)
             return ERROR_R("append", "could not read block " << read_block);
 
+        // copy every byte from source block into destination block
         for (const auto byte : block)
         {
             write_block[current_write_byte_offset++] = byte;
-
+            // If destination block becomes full, flush it and move to next block
             if (current_write_byte_offset == BLOCK_SIZE)
             {
                 if (disk.write(file_2_blocks[current_block_index], write_block) != 0)
@@ -916,7 +922,7 @@ int FS::append(const std::string& filepath1, const std::string& filepath2)
             }
         }
     }
-
+    // add blocks to fat
     add_blocks_to_fat(file_2_blocks, "append");
 
     return 0;
