@@ -473,15 +473,18 @@ std::vector<uint16_t> FS::get_related_blocks(const uint16_t starter_block) const
     return result;
 }
 
-
+//loads fat from disk, thus initializing file system object; -> initial state of current working dir
 FS::FS() : fat{}
-{
+{   
+    //loads fat from block on disk
     if (disk.read(FAT_BLOCK, reinterpret_cast<uint8_t*>(&fat)) != 0)
     {
+        //Fat has to be readable
         ERROR("FS", "could not read FAT block");
         return;
     }
 
+    //initializes current working dir to root, starting user in root
     current_dir = {
         .file_name = "",
         .size = 0,
@@ -497,12 +500,18 @@ FS::~FS()
 // formats the disk, i.e., creates an empty file system
 int FS::format()
 {
+    //sets all entries to zero, thus clearing FAT
     std::memset(&fat, 0, sizeof(fat));
+
+    //marks root block and FAT block as end of file
+    //so they cant be used or overwritten
     fat[ROOT_BLOCK] = FAT_EOF;
     fat[FAT_BLOCK] = FAT_EOF;
 
+    //write initialized FAT to disk
     write_fat_to_disk();
 
+    //initialize empty block buffer, directory with all zeros
     uint8_t block[BLOCK_SIZE]{};
     if (disk.write(ROOT_BLOCK, block) != 0)
     {
@@ -517,40 +526,48 @@ int FS::format()
 // written on the following rows (ended with an empty row)
 int FS::create(const std::string& filepath)
 {
+    //takes user input lines until empty line
     std::vector<std::string> user_input;
     while (true)
     {
         std::string line;
         std::getline(std::cin, line);
 
+        //as mentioned above, break when reading empty line
         if (line.empty())
             break;
 
         user_input.emplace_back(line);
     }
 
+    //calculates size of file in bytes
     uint32_t size = 0;
     for (const auto& input : user_input)
-        size += static_cast<int>(input.size()) + 1;
+        size += static_cast<int>(input.size()) + 1; // +1 for "\n"
 
+    //calculates how many blocks will be needed to store the file
     const int block_count = (static_cast<int>(size) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
+    //finds parent dir, and name if new file
     std::string file_name;
     const int16_t block_index = walk_path(filepath, file_name, "create");
 
+    //if block index wierd, exit
     if (block_index == -1)
         return -1;
 
+    //dont let users allow naming files ".." "." as they are reserved
     if (file_name == ".." || file_name == ".")
         return ERROR_R("create", "'..' is a reserved name");
 
+    //initialize block and make sure block is readable
     uint8_t block[BLOCK_SIZE];
     if (disk.read(block_index, block) != 0)
     {
         ERROR("create", "could not read block " << block_index);
         return -1;
     }
-
+    //make sure file name is unique, using block from ablove
     dir_entry result_entry{};
     int16_t index;
     if (find_entry(block, block_index, file_name, result_entry, index, "create", false))
@@ -565,14 +582,18 @@ int FS::create(const std::string& filepath)
         return -1;
     }
 
+    //get number of free block in the FAT
     const std::vector<uint16_t> empty_blocks = find_empty_blocks(block_count, "create");
 
+    //if no free blocks return with no creation
     if (empty_blocks.empty())
         return -1;
 
+    //link new blocks together in the FAT table
     if (!add_blocks_to_fat(empty_blocks, "create"))
         return -1;
 
+    //create dir entry data for new file
     dir_entry new_entry = {
         .file_name = "",
         .size = size,
@@ -581,16 +602,19 @@ int FS::create(const std::string& filepath)
         .access_rights = READ | WRITE
     };
 
+    //copy string of filename into fixed size character array of entry
     std::strncpy(new_entry.file_name, file_name.c_str(), sizeof(new_entry.file_name) - 1);
 
+    // add new files entry into parent dir block
     if (!add_dir_entry(block, block_index, new_entry, "create"))
         return -1;
 
+    //preparation of writing file data to assigned blocks
     int byte_offset = 0;
     int block_offset = 0;
-
     std::memset(block, 0, BLOCK_SIZE);
 
+    //define helper lambda to flush current buffer to disk when it fills
     auto flush_block_if_full = [&]()
     {
         if (byte_offset == BLOCK_SIZE)
@@ -602,6 +626,7 @@ int FS::create(const std::string& filepath)
         }
     };
 
+    //go through stored user input and write to the blocks
     for (const auto& input : user_input)
     {
         for (const char c : input)
@@ -609,10 +634,12 @@ int FS::create(const std::string& filepath)
             block[byte_offset++] = static_cast<uint8_t>(c);
             flush_block_if_full();
         }
+        //appends newline char after every string from input vector
         block[byte_offset++] = '\n';
         flush_block_if_full();
     }
 
+    //write last block to disk if theres a partially filled one with remaining data
     if (byte_offset > 0)
         disk.write(empty_blocks[block_offset], block);
 
@@ -626,26 +653,34 @@ int FS::cat(const std::string& filepath)
     int16_t block_index, index;
     dir_entry result{};
     
+    //resolve the path to file, check for read perms
+    //fills result entry with file data
     if (!resolve_file(block, filepath, result, index, block_index, READ, "cat"))
         return -1;
 
+    //gets full list of block indexes of file from FAT chain
     const auto blocks = get_related_blocks(result.first_blk);
 
     int bytes_read = 0;
 
+    //goes through every block index in file block chain
     for (const auto related_block_index : blocks)
     {
+        //read current data block
         if (disk.read(related_block_index, block) != 0)
         {
             ERROR("cat", "could not read block " << related_block_index);
             return -1;
         }
 
+        //goes through every byte in block buff
         for (const auto byte : block)
         {
+            //stop print when reached size of file
             if (bytes_read == static_cast<int>(result.size))
                 break;
-
+            
+            //print byte as char in the console
             std::cout << static_cast<char>(byte);
             bytes_read++;
         }
@@ -659,16 +694,18 @@ int FS::cat(const std::string& filepath)
 // ls lists the content in the currect directory (files and sub-directories)
 int FS::ls()
 {
+    // read the current directory block
     uint8_t block[BLOCK_SIZE];
     if (disk.read(current_dir.first_blk, block) != 0)
     {
         ERROR("ls", "could not read block " << current_dir.first_blk);
         return -1;
     }
-
+    // get the entries and calculate how many directory entries fit into one block
     const dir_entry* entries = reinterpret_cast<dir_entry*>(block);
     constexpr int size = BLOCK_SIZE / sizeof(dir_entry);
 
+    // Lambda function that appends the permission characters
     auto check_access = [](const uint8_t access_rights, const uint8_t right, const char right_str, std::string& str)
     {
         if ((access_rights & right) == right)
@@ -676,20 +713,24 @@ int FS::ls()
         else
             str += '-';
     };
-
+    // The header for the directory list
     std::cout << "name\t type\t accessrights\t size\n";
 
+    // iterate over every possible directory entry in the block
     for (int i = 0; i < size; i++)
-    {
+    {   
+    
         const dir_entry entry = entries[i];
         if (is_entry_empty(entry) || std::string(entry.file_name) == "..")
             continue;
 
+        // Checks amd appends the permissions
         std::string access_str;
         check_access(entry.access_rights, READ, 'r', access_str);
         check_access(entry.access_rights, WRITE, 'w', access_str);
         check_access(entry.access_rights, EXECUTE, 'x', access_str);
 
+        // Prints the entry information
         std::cout
             << entry.file_name << "\t "
             << (entry.type == TYPE_DIR ? "dir" : "file") << "\t "
@@ -793,23 +834,26 @@ int FS::cp(const std::string& source_path, const std::string& dest_path)
 // mv <sourcepath> <destpath> renames the file <sourcepath> to the name <destpath>,
 // or moves the file <sourcepath> to the directory <destpath> (if dest is a directory)
 int FS::mv(const std::string& source_path, const std::string& dest_path)
-{
+{   
+    // Resolve the file
     uint8_t block[BLOCK_SIZE];
     dir_entry source_entry{};
     int16_t source_parent_index, index;
     if (!resolve_file(block, source_path, source_entry, index, source_parent_index, READ | WRITE, "mv"))
         return -1;
 
+    // Get the file name
     const std::string source_file_name = source_entry.file_name;
-
+    
+    // get the destination parent block index
     std::string dest_file_name;
     int16_t dest_parent_index = walk_path(dest_path, dest_file_name, "cp", false);
     if (dest_parent_index == -1)
         return -1;
-
+    // read the block
     if (disk.read(dest_parent_index, block) != 0)
         return ERROR_R("mv", "could not read block " << dest_parent_index);
-
+    //  check if the name already exists
     dir_entry dest_entry{};
     int16_t dest_index;
     const bool exists = find_entry(block, dest_parent_index, dest_file_name, dest_entry, dest_index, "cp", false);
@@ -852,12 +896,13 @@ int FS::mv(const std::string& source_path, const std::string& dest_path)
 
 // rm <filepath> removes / deletes the file <filepath>
 int FS::rm(const std::string& filepath)
-{
+{   
+
     uint8_t block[BLOCK_SIZE];
     int16_t index;
     dir_entry entry{};
     std::string name;
-    
+    // get the parent block index
     const int16_t parent = walk_path(filepath, name, "rm");
     if (parent < 0)
         return false;
@@ -870,9 +915,12 @@ int FS::rm(const std::string& filepath)
     if (!find_entry(block, parent, name, entry, index, "rm"))
         return -1;
 
+    // Check the permissions of the entry
     if ((entry.access_rights & WRITE) != WRITE)
         return ERROR_R("rm", "no permission to delete " << name);
-
+    // Check what type of entry it is.
+    // If its a directory, check if its empty. If not empty we do not delete
+    // if the directory is empty then continue to delete.
     if (entry.type == TYPE_DIR)
     {
         uint8_t dir_block[BLOCK_SIZE];
@@ -889,6 +937,7 @@ int FS::rm(const std::string& filepath)
         }
     }
     
+    // Remove the entry 
     constexpr dir_entry empty{};
     overwrite_dir_entry(block, parent, empty, index, "rm");
 
@@ -896,7 +945,7 @@ int FS::rm(const std::string& filepath)
 
     if (blocks.empty())
         return -1;
-
+    // Remove the related blocks from fat
     if (!remove_blocks_from_fat(blocks, "rm"))
         return -1;
 
